@@ -1,0 +1,47 @@
+{
+  "name": "rabbithole",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "tsx watch apps/server/src/index.ts",
+    "build": "tsc --noEmit && node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "check": "npm run typecheck && npm test && npm run build",
+    "start": "node --env-file-if-exists=.env --import tsx apps/server/src/index.ts",
+    "test:browser": "tsx tests/browser.ts",
+    "setup:local": "node scripts/setup-local.mjs",
+    "format": "prettier --write apps packages tests scripts integrations docs/*.md README.md package.json tsconfig.json render.yaml",
+    "lint": "prettier --check apps packages tests scripts integrations docs/*.md README.md package.json tsconfig.json render.yaml"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@mozilla/readability": "0.6.0",
+    "@xyflow/react": "12.12.0",
+    "better-sqlite3": "^12.0.0",
+    "express": "^5.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/chrome": "^0.1.0",
+    "@types/express": "^5.0.0",
+    "@types/jsdom": "^21.1.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "esbuild": "^0.25.0",
+    "jsdom": "^26.0.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

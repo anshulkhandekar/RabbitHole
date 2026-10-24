@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "RabbitHole — Make connections",
+  "description": "An intentional research trail, source-linked maps, and recall practice. Powered by your Superhuman Go agent.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "120",
+  "incognito": "not_allowed",
+  "permissions": [
+    "storage",
+    "sidePanel",
+    "activeTab",
+    "scripting",
+    "contextMenus",
+    "alarms"
+  ],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_title": "Open RabbitHole" },
+  "side_panel": { "default_path": "index.html" },
+  "options_page": "index.html?settings=1",
+  "commands": {
+    "save-highlight": {
+      "suggested_key": { "default": "Alt+Shift+H", "mac": "Alt+Shift+H" },
+      "description": "Save selected text to RabbitHole"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}
