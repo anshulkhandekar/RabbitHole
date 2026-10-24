@@ -4,7 +4,7 @@
 
 RabbitHole captures an explicitly enabled browsing session, then lets a Superhuman Go agent turn its actual sources into a concept map and recall activities. The Chrome extension handles collection and study mechanics. Go owns the generative reasoning. An authenticated backend stores and validates the results; no separate LLM API key is required.
 
-Core code, local tests, packaged-extension synthetic browser checks, and the existing Go agent's instructions are implemented. **Hosted Go read/write is not yet verified.** See [current status](docs/status.md) before making integration or submission claims.
+Core code, local tests, packaged-extension browser checks, and the existing Go agent are implemented. **Hosted Go read/generate/write/display and incremental merging were verified with genuine captures on October 24, 2026.** The installed extension connects to a durable Render backend. See [current status](docs/status.md) before making integration or submission claims.
 
 ## Quick start
 

@@ -12,18 +12,18 @@
 
 ## Questions judges may ask
 
-| Question                                | Accurate answer                                                                                                                                                 |
-| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Why not paste everything into chat?     | Enabled browsing captures a bounded trail automatically, and results persist as a source-linked map plus activities.                                            |
-| What does Go do?                        | Extracts/merges concepts, reasons about relationships, applies preferences, generates study material, and provides deeper feedback through its connected tools. |
-| Is the Process button automatic?        | No. It opens Go and attempts to copy an exact prompt. The user sends it and may approve the save.                                                               |
-| Why an extension?                       | It can observe the user's explicitly enabled research tabs and selection without repeated uploads.                                                              |
-| Can another person guess my session ID? | IDs alone do not authorize access. Every API/tool uses the authenticated owner's token.                                                                         |
-| What happens offline?                   | Captures and mutations queue locally and retry. The UI distinguishes pending sync and pending analysis. Device storage still has limits.                        |
-| How are hallucinations prevented?       | References and versions are structurally validated; Go must cite actual captures and label inference. Semantic correctness still needs source inspection.       |
-| Do you store everything I browse?       | Only enabled included tabs; no incognito. Inputs/editable fields are excluded. Pause stops recording. A clean public-source profile is used for demos.          |
-| What do quiz scores prove?              | Only whether a chosen option matches the saved answer; self-ratings are user judgments, not measured learning gains.                                            |
-| What is unfinished?                     | Live hosted Go read/write, account-specific approval/scheduling behavior, and real demo rehearsal must be verified before submission.                           |
+| Question                                | Accurate answer                                                                                                                                                                                                                 |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Why not paste everything into chat?     | Enabled browsing captures a bounded trail automatically, and results persist as a source-linked map plus activities.                                                                                                            |
+| What does Go do?                        | Extracts/merges concepts, reasons about relationships, applies preferences, generates study material, and provides deeper feedback through its connected tools.                                                                 |
+| Is the Process button automatic?        | No. It opens Go and attempts to copy an exact prompt. The user sends it and may approve the save.                                                                                                                               |
+| Why an extension?                       | It can observe the user's explicitly enabled research tabs and selection without repeated uploads.                                                                                                                              |
+| Can another person guess my session ID? | IDs alone do not authorize access. Every API/tool uses the authenticated owner's token.                                                                                                                                         |
+| What happens offline?                   | Captures and mutations queue locally and retry. The UI distinguishes pending sync and pending analysis. Device storage still has limits.                                                                                        |
+| How are hallucinations prevented?       | References and versions are structurally validated; Go must cite actual captures and label inference. Semantic correctness still needs source inspection.                                                                       |
+| Do you store everything I browse?       | Only enabled included tabs; no incognito. Inputs/editable fields are excluded. Pause stops recording. A clean public-source profile is used for demos.                                                                          |
+| What do quiz scores prove?              | Only whether a chosen option matches the saved answer; self-ratings are user judgments, not measured learning gains.                                                                                                            |
+| What is unfinished?                     | Hosted Go read/write and incremental merging are verified. Final timed video/recovery rehearsal remains; scheduled write behavior is untested. General publishing is organization-blocked, while Share with support is enabled. |
 
 ## Commands and endpoints
 
