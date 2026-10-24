@@ -1,22 +1,7 @@
 import { Store } from "./store";
 import { createApp } from "./app";
-const users = JSON.parse(process.env.RABBITHOLE_USERS ?? "[]") as {
-  owner: string;
-  token: string;
-}[];
-if (
-  !users.length ||
-  users.some(
-    (u) =>
-      !u.owner ||
-      !u.token ||
-      u.token.length < 32 ||
-      u.token.startsWith("REPLACE"),
-  )
-)
-  throw new Error(
-    "Configure RABBITHOLE_USERS with a personal random token (32+ characters); see .env.example",
-  );
+import { getUsers } from "./config";
+const users = getUsers();
 const store = new Store(
   process.env.DATABASE_PATH ?? "./data/rabbithole.sqlite",
 );

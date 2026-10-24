@@ -6,7 +6,7 @@ The application implements one integration transport: MCP Streamable HTTP. Go co
 
 Deploy using [deployment.md](deployment.md). Go cannot reach your computer's localhost. The endpoint is `https://YOUR-SERVICE.onrender.com/mcp`; the public `/health` endpoint contains no research. All research/API/MCP requests require `Authorization: Bearer YOUR_PERSONAL_TOKEN`.
 
-Generate a 32-byte random token using `npm run setup:local`, or the command in `.env.example`. Set `RABBITHOLE_USERS` in the host environment to a JSON array of owner/token pairs. Use a distinct token for every person. Do not put tokens in source, screenshots, video, a shared agent prompt, or URLs. The server derives ownership from the token; knowing a session ID is insufficient. Revoking a user means removing/rotating their token and restarting the backend.
+Generate a 32-byte random token using `npm run setup:local`, or the command in `.env.example`. The Render Blueprint can generate `RABBITHOLE_TOKEN` server-side for one owner. Use that generated token to connect the extension and Go. For multiple owners, set `RABBITHOLE_USERS` in the host environment to a JSON array of owner/token pairs. Use a distinct token for every person. Do not put tokens in source, screenshots, video, a shared agent prompt, or URLs. The server derives ownership from the token; knowing a session ID is insufficient. Revoking a user means removing/rotating their token and restarting the backend.
 
 ## 2. Create the connector
 

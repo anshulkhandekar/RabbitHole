@@ -4,7 +4,7 @@ Use a single Render Node web service with a persistent disk. This keeps the expl
 
 1. Use the **private** repository at https://github.com/anshulkhandekar/RabbitHole. Do not make it public. This project is prepared with `origin` pointing to that repository.
 2. In Render, connect the private repository and create a Blueprint from `render.yaml`. Review the service plan and disk cost before confirming.
-3. Set `RABBITHOLE_USERS` as the JSON array described in `.env.example`, with a long random personal token. Set `PUBLIC_URL` to the assigned HTTPS URL (reserved for future link receipts; no current code depends on it).
+3. The Blueprint generates `RABBITHOLE_TOKEN` on Render and sets `RABBITHOLE_OWNER=anshul`. In a manual service form, use Generate for the token; keep it private. Multi-owner deployments can instead use the `RABBITHOLE_USERS` JSON array in `.env.example`. No local credential needs to be uploaded to Render.
 4. Confirm `DATABASE_PATH=/var/data/rabbithole.sqlite` and a mounted persistent disk at `/var/data`. Never use free/ephemeral disk for the database.
 5. Wait for the `/health` check. Configure the extension with the service origin and configure Go with its `/mcp` endpoint.
 6. Test unauthorized requests (401), capture sync, Go read/write, restart persistence, then incremental processing. Deployment is unverified until those checks actually run.

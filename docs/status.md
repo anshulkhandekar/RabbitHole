@@ -11,7 +11,7 @@
 
 ## Locally verified
 
-- TypeScript validation, formatter check, production extension build, and all 10 focused tests passed.
+- TypeScript validation, formatter check, production extension build, and all 12 focused tests passed.
 - Ownership, capture retry/source attribution, stale/retried save rejection, invalid evidence/graph/quiz rejection, incremental attempts, bounded retrieval, SQLite reopen persistence, deleted-session capture rejection.
 - Official MCP client over local HTTP: authenticated GetSession → fixture analysis through SaveSessionAnalysis → exact API retrieval. This is a harness, **not Go generation**.
 - Packaged extension scripts in isolated Chromium: automatic search/article capture from intercepted synthetic pages, editable/input exclusion, highlight, pause, unrelated-tab exclusion, explicit include, authenticated sync, saved fixture display, evidence details, recall attempt persistence, flashcards, quiz, reload, narrow viewport, interrupted delivery, queued review recovery across a full browser-profile restart with collection paused and old tab bindings cleared, retry, and offline deletion without resurrection. Test-only manifest pregrants website access; production optional-permission prompt is unverified.
@@ -28,7 +28,7 @@ Private repository created and verified: https://github.com/anshulkhandekar/Rabb
 - Replaced its generic starter description/instructions with the RabbitHole evidence/processing configuration. Save completed (Save button disabled; no unsaved-changes state).
 - No connector, extra tool access, trigger, sharing setting, or approval bypass was enabled. This is configuration verification only, not a generation/read/write test.
 
-The authenticated local backend is also running at http://localhost:3210. Credentials were generated into ignored .env without printing or publishing the token. The user created a Render account through GitHub. Deployment is prepared in the dashboard; installing the Render GitHub App for RabbitHole only is awaiting explicit access approval.
+The authenticated local backend is also running at http://localhost:3210. Credentials were generated into ignored .env without printing or publishing the token. The user created a Render account through GitHub. Deployment is prepared in the dashboard; the Render GitHub App installation for RabbitHole only was approved and its repository access verified. The paid service form is prepared with a 1 GB disk and is awaiting token generation and deployment confirmation.
 
 ## Still required before submission
 
