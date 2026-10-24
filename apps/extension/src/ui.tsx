@@ -79,7 +79,7 @@ function App() {
       text ??
       `Process RabbitHole session ${session.id}. Retrieve the pending captures and existing analysis using RabbitHole tools, merge evidence-linked concepts and selected activities, and save the complete analysis. Report the saved version and remaining pending captures.`;
     setPrompt(textPrompt);
-    void navigator.clipboard.writeText(textPrompt).catch(() => {});
+    void navigator.clipboard?.writeText(textPrompt).catch(() => {});
     void chrome.tabs.create({ url: state.config.agentUrl });
   }
   const exported = () => {

@@ -14,19 +14,21 @@
 - TypeScript validation, formatter check, production extension build, and all 10 focused tests passed.
 - Ownership, capture retry/source attribution, stale/retried save rejection, invalid evidence/graph/quiz rejection, incremental attempts, bounded retrieval, SQLite reopen persistence, deleted-session capture rejection.
 - Official MCP client over local HTTP: authenticated GetSession → fixture analysis through SaveSessionAnalysis → exact API retrieval. This is a harness, **not Go generation**.
-- Packaged extension scripts in isolated Chromium: automatic search/article capture from intercepted synthetic pages, editable/input exclusion, highlight, pause, unrelated-tab exclusion, explicit include, authenticated sync, saved fixture display, evidence details, recall attempt persistence, flashcards, quiz, reload, narrow viewport, interrupted delivery, queued review recovery across a full browser-profile restart, retry, and offline deletion without resurrection. Test-only manifest pregrants website access; production optional-permission prompt is unverified.
+- Packaged extension scripts in isolated Chromium: automatic search/article capture from intercepted synthetic pages, editable/input exclusion, highlight, pause, unrelated-tab exclusion, explicit include, authenticated sync, saved fixture display, evidence details, recall attempt persistence, flashcards, quiz, reload, narrow viewport, interrupted delivery, queued review recovery across a full browser-profile restart with collection paused and old tab bindings cleared, retry, and offline deletion without resurrection. Test-only manifest pregrants website access; production optional-permission prompt is unverified.
 - UI screenshots visually inspected. `workspace-test.png` and `sidebar-test.png` are explicitly synthetic test data. They are not integration/demo results.
-- Dependency audit after Zod update reported zero known vulnerabilities at build time.
+- Dependency audit after Zod update reported zero known vulnerabilities at build time. Compiled production server smoke test passed health and rejected unauthenticated research access (401).
 
 ## Repository
 
-Private repository created and verified: https://github.com/anshulkhandekar/RabbitHole. Source is committed locally and prepared for authenticated push; .env, database files, build output, and live account screenshots are excluded.
+Private repository created and verified: https://github.com/anshulkhandekar/RabbitHole. Source is committed and pushed to main; .env, database files, build output, and live account screenshots are excluded.
 
 ## Live account verified
 
-- Existing signed-in RabbitHole agent found at `https://go.superhuman.com/builder/52b17c07-ad35-4690-9584-007c60165e15`.
+- Runnable chat URL verified: `https://go.superhuman.com/agents/72133`. Existing signed-in RabbitHole agent settings found at `https://go.superhuman.com/builder/52b17c07-ad35-4690-9584-007c60165e15`.
 - Replaced its generic starter description/instructions with the RabbitHole evidence/processing configuration. Save completed (Save button disabled; no unsaved-changes state).
 - No connector, extra tool access, trigger, sharing setting, or approval bypass was enabled. This is configuration verification only, not a generation/read/write test.
+
+The authenticated local backend is also running at http://localhost:3210. Credentials were generated into ignored .env without printing or publishing the token. The user created a Render account through GitHub. Deployment is prepared in the dashboard; installing the Render GitHub App for RabbitHole only is awaiting explicit access approval.
 
 ## Still required before submission
 

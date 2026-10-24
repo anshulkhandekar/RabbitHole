@@ -196,7 +196,7 @@ try {
     .getByRole("button", { name: "GPU A processor", exact: false })
     .click();
   await ui.getByText("BACK TO THE SOURCE", { exact: true }).waitFor();
-  await ui.screenshot({ path: "docs/workspace-test.png", fullPage: true });
+  await ui.screenshot({ path: "test-results/workspace.png", fullPage: true });
   await ui.getByRole("button", { name: "Practice", exact: false }).click();
   await ui
     .getByLabel("Your explanation")
@@ -214,7 +214,7 @@ try {
   await ui.getByRole("heading", { name: fixture.title }).waitFor();
   assert.equal(store.get("test", sessionId).attempts.length, 1);
   await ui.setViewportSize({ width: 380, height: 850 });
-  await ui.screenshot({ path: "docs/sidebar-test.png", fullPage: true });
+  await ui.screenshot({ path: "test-results/sidebar.png", fullPage: true });
   // Interrupt delivery, then restart the entire browser profile with a queued review.
   backendAvailable = false;
   const queued = await ui.evaluate(
@@ -254,6 +254,8 @@ try {
     );
     assert.ok(beforeRetry.queue.length > 0);
     assert.equal(beforeRetry.sessions[sessionId].attempts.length, 2);
+    assert.equal(beforeRetry.sessions[sessionId].status, "paused");
+    assert.deepEqual(beforeRetry.tabs, {});
     backendAvailable = true;
     const synced = await recovered.evaluate(() =>
       chrome.runtime.sendMessage({ type: "refresh" }),

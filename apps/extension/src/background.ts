@@ -25,12 +25,46 @@ const initial: Local = {
     agentUrl: "https://go.superhuman.com",
   },
 };
-const load = async (): Promise<Local> => ({
-  ...initial,
-  ...(((await chrome.storage.local.get("state")).state as Partial<Local>) ??
-    {}),
-});
-const persist = async (s: Local) => chrome.storage.local.set({ state: s });
+const load = async (): Promise<Local> => {
+  const local = (await chrome.storage.local.get("state")).state as
+    Partial<Local> | undefined;
+  const state: Local = { ...initial, ...local };
+  const bindings = (await chrome.storage.session.get("bindings")).bindings as
+    | { tabs: Record<string, string>; lastCapture: Record<string, string> }
+    | undefined;
+  state.tabs = bindings?.tabs ?? {};
+  state.lastCapture = bindings?.lastCapture ?? {};
+  // Session storage survives worker suspension but is cleared by a browser restart.
+  // Never trust persisted tab IDs after restart, even if onStartup was not delivered.
+  if (!bindings) {
+    for (const session of Object.values(state.sessions)) {
+      if (session.status === "active") {
+        session.status = "paused";
+        state.queue.push({
+          id: crypto.randomUUID(),
+          method: "PATCH",
+          path: `/api/sessions/${session.id}`,
+          body: { status: "paused" },
+        });
+      }
+    }
+    await chrome.storage.session.set({
+      bindings: { tabs: {}, lastCapture: {} },
+    });
+    await chrome.storage.local.set({
+      state: { ...state, tabs: {}, lastCapture: {} },
+    });
+  }
+  return state;
+};
+const persist = async (s: Local) => {
+  await chrome.storage.local.set({
+    state: { ...s, tabs: {}, lastCapture: {} },
+  });
+  await chrome.storage.session.set({
+    bindings: { tabs: s.tabs, lastCapture: s.lastCapture },
+  });
+};
 const enqueue = (s: Local, method: string, path: string, body?: unknown) =>
   s.queue.push({ id: crypto.randomUUID(), method, path, body });
 async function flush(s: Local) {
@@ -95,6 +129,11 @@ chrome.runtime.onInstalled.addListener(() => {
   void chrome.contextMenus.create({
     id: "save",
     title: "Save to RabbitHole",
+    contexts: ["selection"],
+  });
+  void chrome.contextMenus.create({
+    id: "save-confusing",
+    title: "Save to RabbitHole — confusing",
     contexts: ["selection"],
   });
   void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
@@ -416,7 +455,14 @@ async function selected(tabId: number, tag = "important") {
     .catch(() => {});
 }
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === "save" && tab?.id) void selected(tab.id);
+  if (
+    (info.menuItemId === "save" || info.menuItemId === "save-confusing") &&
+    tab?.id
+  )
+    void selected(
+      tab.id,
+      info.menuItemId === "save-confusing" ? "confusing" : "important",
+    );
 });
 chrome.commands.onCommand.addListener(() => {
   void chrome.tabs

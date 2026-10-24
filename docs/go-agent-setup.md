@@ -26,7 +26,7 @@ Name: **RabbitHole**
 
 Description and paste-ready instructions: [agent-instructions.md](../integrations/superhuman/agent-instructions.md). Copy the description separately, then the instructions after the divider. Attach the RabbitHole connector under Tools and Access. Save. No automatic trigger is required for manual chat use.
 
-In extension Settings, enter your backend URL, your own token, and the real saved Go agent URL copied from the address bar. No invented prompt URL parameter is used.
+In extension Settings, enter your backend URL, your own token, and the real saved Go agent URL copied from the address bar. The verified current account chat URL is `https://go.superhuman.com/agents/72133`; its builder URL is a separate settings page. No invented prompt URL parameter is used.
 
 ## 4. Prove the first round trip
 

@@ -31,3 +31,13 @@ await copyFile(
   "THIRD_PARTY_LICENSES.txt",
   "dist/extension/THIRD_PARTY_LICENSES.txt",
 );
+await mkdir("dist/server", { recursive: true });
+await build({
+  entryPoints: ["apps/server/src/index.ts"],
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  packages: "external",
+  outfile: "dist/server/index.mjs",
+  target: "node22",
+});

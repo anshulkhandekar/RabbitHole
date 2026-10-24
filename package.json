@@ -8,12 +8,12 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "tsx watch apps/server/src/index.ts",
+    "dev": "node --watch --env-file-if-exists=.env --import tsx apps/server/src/index.ts",
     "build": "tsc --noEmit && node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "check": "npm run typecheck && npm test && npm run build",
-    "start": "node --env-file-if-exists=.env --import tsx apps/server/src/index.ts",
+    "start": "node --env-file-if-exists=.env dist/server/index.mjs",
     "test:browser": "tsx tests/browser.ts",
     "setup:local": "node scripts/setup-local.mjs",
     "format": "prettier --write apps packages tests scripts integrations docs/*.md README.md package.json tsconfig.json render.yaml",
