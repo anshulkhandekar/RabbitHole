@@ -1,6 +1,6 @@
 # Connect RabbitHole to Go
 
-The application implements one integration transport: MCP Streamable HTTP. Go configuration is manual and is not deployed by committing this repository. School agent-builder access and saving the existing RabbitHole agent instructions were verified in the signed-in browser. Actual connector execution remains unverified. An exact snapshot of the saved instructions is in `integrations/superhuman/live-agent-instructions.txt`.
+The application implements one integration transport: MCP Streamable HTTP. Go configuration is manual and is not deployed by committing this repository. School agent-builder access and saving the existing RabbitHole agent instructions were verified in the signed-in browser. The private connector (Pack 74898, released v2) is authenticated and attached. A genuine GetSession → Go generation → approved SaveSessionAnalysis → extension display round trip was verified on October 24, 2026. An exact snapshot of the saved instructions is in `integrations/superhuman/live-agent-instructions.txt`.
 
 ## 1. Reachable, authenticated server
 
@@ -14,11 +14,11 @@ Following the [official MCP guide](https://coda.io/packs/build/latest/guides/blo
 
 1. Open the Packs page in your Superhuman Docs workspace.
 2. Select **Create an MCP Connector** and enter your hosted `/mcp` URL.
-3. Choose **Bearer token** authentication; enter your personal token when connecting the account. Verify the generated code declares `HeaderBearerToken` and your backend's network domain. If connector discovery asks for auth, provide the same token through its auth setup, never a URL parameter.
+3. Static bearer authentication was not discovered automatically in the live wizard. Use the validated [pack.ts](../integrations/superhuman/pack.ts) source, which declares per-user `HeaderBearerToken` and the backend network domain. Build and release the connector, then enter the personal token in its account connection dialog, never a URL parameter.
 4. Create the connector, release it, and add the connection to your Go agent. Installation/sharing rights depend on your workspace. Later connector code changes need their own build and release. The server's runtime tool list is retrieved through MCP.
 5. Confirm tools: `ListSessions`, `GetSession`, `SaveSessionAnalysis`. The first two advertise `readOnlyHint: true`; the write advertises `false` and should require confirmation. Do not change that annotation to bypass approval.
 
-The generated connector route avoids a redundant local Pack build. The pinned official MCP SDK is in `package-lock.json`.
+The released connector was also validated locally with `npx coda validate integrations/superhuman/pack.ts`. The official `@codahq/packs-sdk` is a development dependency; the production server uses the official MCP SDK. For this private connector, the documented setup route is `https://docs.superhuman.com/go/agent/setup/74898`. After connecting, search RabbitHole in the agent builder’s Add connections dialog. Read approval is Always allow; Write approval remains Always ask.
 
 ## 3. Configure the agent
 
@@ -36,10 +36,12 @@ In extension Settings, enter your backend URL, your own token, and the real save
 4. Return and click Sync & check Go. Verify the exact saved title, concepts, and evidence are displayed. Export JSON and compare its `analysis` to the actual tool call when debugging.
 5. Record the run date, agent link, write approval behavior, and result in status.md. Only then mark Gate A live-verified.
 
-Normal processing requires **at least four actions after capture**: open Go, paste/send the prompt (one or two actions depending on clipboard and focus), approve the save if requested, then sync the extension. If paste and send are separate, that is five. Native Go focus/navigation or authentication can add actions. This count is the designed workflow, not an observed account measurement. The UI never says opening Go started reasoning.
+Normal processing requires **at least four actions after capture**: open Go, paste/send the prompt (one or two actions depending on clipboard and focus), approve the save if requested, then sync the extension. If paste and send are separate, that is five. Native Go focus/navigation or authentication can add actions. The live test used six discrete actions from unsynced captures: Sync, Open in Go, paste, Send, Approve, Sync. If retry has already synced captures, five remain. Returning/focusing the extension may add navigation. The UI never says opening Go started reasoning.
 
 ## 5. Scheduling later
 
 The official builder lists Scheduled, While writing, Email received/sent, and Slack mentioned/message triggers. Manual chat is an invocation path, not a configurable event trigger. First prove the manual loop. Then configure an available schedule in your account, test one pending batch, and record cadence, approvals, completion timestamp, and duplicate/no-op behavior. No cadence or unattended write behavior is assumed. Do not enable Slack by default.
 
 MCP Apps are documented only in Go's web client. They are unnecessary here. This project has no direct Go invocation API, inbound webhook, internal endpoint, or browser-click automation workaround.
+
+Live scheduling inspection: Custom exposes interval 1–30 with Hour/Day/Week/Month units. No minute unit was present. No schedule was saved; write confirmation and completion remain untested for scheduled runs. Manual chat is the verified workflow.

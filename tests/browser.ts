@@ -16,11 +16,17 @@ import { resolve } from "node:path";
 const store = new Store(":memory:"),
   token = "browser-test-only-" + "x".repeat(40);
 let backendAvailable = true;
+let releaseReview: (() => void) | undefined;
+let reviewStarted: (() => void) | undefined;
+let reviewGate: Promise<void> | undefined;
 const app = createApp(store, [{ owner: "test", token }]);
 const server = createServer((req, res) => {
   if (!backendAvailable) {
     res.writeHead(503);
     res.end();
+  } else if (req.url?.endsWith("/reviews") && reviewGate) {
+    reviewStarted?.();
+    void reviewGate.then(() => app(req, res));
   } else app(req, res);
 }).listen(0, "127.0.0.1");
 await new Promise<void>((r) => server.once("listening", r));
@@ -202,8 +208,25 @@ try {
     .getByLabel("Your explanation")
     .fill("It runs independent operations at once.");
   await ui.getByRole("button", { name: "Reveal model explanation" }).click();
+  // A completed save must belong to the reviewed item even if the user changes mode.
+  reviewGate = new Promise<void>((resolve) => {
+    releaseReview = resolve;
+  });
+  const reviewRequest = new Promise<void>((resolve) => {
+    reviewStarted = resolve;
+  });
   await ui.getByRole("button", { name: "Understood", exact: true }).click();
-  await ui.getByText("✓ Progress saved", { exact: false }).waitFor();
+  await reviewRequest;
+  await ui.getByRole("button", { name: "Flashcards", exact: true }).click();
+  releaseReview!();
+  await ui
+    .getByRole("button", { name: "Sync & check Go" })
+    .waitFor({ state: "visible" });
+  await ui.getByRole("button", { name: "Reveal model explanation" }).click();
+  await ui
+    .getByRole("button", { name: "Understood", exact: true })
+    .waitFor({ timeout: 5000 });
+  reviewGate = undefined;
   await ui.getByRole("button", { name: "Short quiz", exact: true }).click();
   await ui.getByRole("button", { name: "B. Parallel execution" }).click();
   await ui.getByRole("button", { name: "Check answer" }).click();

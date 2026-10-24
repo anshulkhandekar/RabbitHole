@@ -1,6 +1,6 @@
 # Four-minute demonstration
 
-Do not record the flagship submission until Gates A–C are live-verified. The extension's synthetic UI harness and screenshots must never stand in for real Go results. Deadline and submission details below are supplied by the build brief; organizer slides have not been independently reviewed in this repository.
+Do not record the flagship submission until Gates A–C are live-verified. The extension's synthetic UI harness and screenshots must never stand in for real Go results. The current [organizer submission page](https://docs.superhuman.com/d/_dMz3LvvGjbV/Submitting-Your-Agent_suhroMRF) was reviewed on October 24 and confirms October 31 plus a write-up, agent link and video. The under-five-minute Loom requirement remains supplied by the brief; the latest slides have not been independently reviewed.
 
 ## Reproducible real session
 
@@ -36,10 +36,10 @@ RabbitHole turns an intentionally enabled browsing session into an evidence-link
 
 ## Submission checklist
 
-- [ ] Verify latest organizer deadline (brief says **October 31, 2026**; aim earlier).
+- [x] Current organizer submission page confirms **October 31**; aim earlier.
 - [ ] Complete the live checks in status.md with real captures and real Go output.
 - [ ] Copy the actual runnable agent link; the builder URL is not automatically a share link.
-- [ ] Enable **Share with Support** in the actual sharing UI, verifying its audience before confirming.
+- [x] **Share with Support** is enabled and verified with user authorization. General publishing/sharing is blocked by the organization; support access is a separate control.
 - [ ] Provide the short description and judge setup instructions (extension install plus isolated backend access).
 - [ ] Record and rehearse under five minutes; use **Loom** as documented in the brief unless organizers confirm another format.
 - [ ] Open the video from a signed-out/incognito viewer to verify public access and audibility.
@@ -47,3 +47,9 @@ RabbitHole turns an intentionally enabled browsing session into an evidence-link
 - [ ] Note actual Go approval prompts and the observed number of actions. Do not claim an unmeasured one-click flow.
 
 Fallback: if scheduling is unreliable, demonstrate manual invocation. If overview extraction fails, show automatic search/article capture plus explicit overview selection. If Go/network is unavailable, show a previously saved **genuine, labeled** session and explain the outage; do not call a fixture a live integration. If no genuine saved session exists, defer the claim and repair the round trip before submitting.
+
+## Verified rehearsal material
+
+A genuine public-source session is already saved in the installed extension: **GPU parallel processing: from graphics streams to CUDA**, version 2, session `77d34230-715f-4ccb-8681-3a0925a497d0`. It contains one Google query, the NVIDIA GPU Gems chapter, a current NVIDIA CUDA introduction, and an important keyboard highlight. Two actual Go saves produced the map and learning activities; the first recall attempt survived the incremental merge. Use this as labeled genuine saved material, never as a claim that a new capture was just processed. Complete the final timed recording with a clean screen and your own narration.
+
+Agent link: https://go.superhuman.com/agents/72133. A review copy does not automatically give judges a backend token. Keep the personal research account isolated; ask organizers whether support review plus the video is sufficient while organizational publishing is disabled.

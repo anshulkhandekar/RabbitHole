@@ -31,3 +31,5 @@ For a request to critique an explanation, retrieve the exact session and relevan
 
 SCHEDULED RUNS (only after manually verified)
 ListSessions, process only active/paused sessions with pending captures, and cap work to one session and 24 captures per run. Finished sessions are skipped. Preserve manual access. Do not promise a cadence, automatic write approval, or unattended completion. A no-new-content run should not mutate anything.
+
+Source scope: respect source dates and versions. Historical GPU or software constraints must not be generalized to current capabilities; explicitly surface disagreements and gaps.

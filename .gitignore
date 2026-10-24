@@ -12,3 +12,6 @@ docs/go-agent-configured.png
 docs/private-repository.png
 docs/render-access-review.png
 docs/render-deploy-review.png
+docs/render-*.png
+docs/extension-permission-review.png
+docs/live-*.png

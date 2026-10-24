@@ -756,7 +756,7 @@ function Practice({
     [revealed, reveal] = useState(false),
     [answer, setAnswer] = useState(""),
     [choice, setChoice] = useState<number | null>(null),
-    [saved, setSaved] = useState(false),
+    [savedReview, setSavedReview] = useState<string | null>(null),
     [saving, setSaving] = useState(false);
   const generated =
     session.analysis?.studyItems.filter((i) => i.type === mode) ?? [];
@@ -772,11 +772,12 @@ function Practice({
   // Only saved Go-generated items can be reviewed; edge explanations are shown in Explore.
   const items = generated,
     item = items[index % Math.max(1, items.length)];
+  const reviewKey = item ? `${session.id}:${session.version}:${item.id}` : null;
   function reset() {
     reveal(false);
     setAnswer("");
     setChoice(null);
-    setSaved(false);
+    setSavedReview(null);
   }
   async function rate(rating: string) {
     if (!item || saving) return;
@@ -790,7 +791,7 @@ function Practice({
       choice: choice ?? undefined,
       timestamp: new Date().toISOString(),
     });
-    if (result) setSaved(true);
+    if (result) setSavedReview(reviewKey);
     setSaving(false);
   }
   return (
@@ -888,7 +889,7 @@ function Practice({
                   ? "Choice grading is deterministic."
                   : "Compare this with your explanation. Your self-rating is not AI grading."}
               </p>
-              {saved ? (
+              {savedReview === reviewKey ? (
                 <p className="success">✓ Progress saved</p>
               ) : (
                 <div className="rating">
