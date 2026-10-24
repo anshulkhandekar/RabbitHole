@@ -18,7 +18,7 @@ Following the [official MCP guide](https://coda.io/packs/build/latest/guides/blo
 4. Create the connector, release it, and add the connection to your Go agent. Installation/sharing rights depend on your workspace. Later connector code changes need their own build and release. The server's runtime tool list is retrieved through MCP.
 5. Confirm tools: `ListSessions`, `GetSession`, `SaveSessionAnalysis`. The first two advertise `readOnlyHint: true`; the write advertises `false` and should require confirmation. Do not change that annotation to bypass approval.
 
-The generated connector route avoids a redundant local Pack build. The pinned official MCP SDK is in `package-lock.json`. The legacy `@coda/packs-sdk` and guessed `@superhuman/packs-sdk` package names returned npm 404 during research; no dependency or API was fabricated to compensate.
+The generated connector route avoids a redundant local Pack build. The pinned official MCP SDK is in `package-lock.json`.
 
 ## 3. Configure the agent
 

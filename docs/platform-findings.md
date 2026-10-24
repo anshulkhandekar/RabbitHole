@@ -21,3 +21,5 @@
 The docs.superhuman.com Packs URL could not be fetched by the research tool; coda.io's official documentation rendered with Superhuman branding. The supplied competition slides were not attached, so the October 31 deadline and submission rules are taken from the user's brief, not independently verified organizer documents.
 
 Installed versions are locked in package-lock.json. Initial dependency scan found a high-severity Zod advisory; upgraded to 4.6.7, then npm audit reported zero known vulnerabilities. Re-run before submission.
+
+The signed-in account was also checked: its workspace exposes Packs → Create an MCP Connector, and the first dialog requires an MCP Server URL. Creating/installing a live connector is pending hosted deployment and authentication.
