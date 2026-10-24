@@ -1,0 +1,24 @@
+@font-face {
+  font-family: "Geologica";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("@fontsource-variable/geologica/files/geologica-latin-wght-normal.woff2")
+    format("woff2-variations");
+}
+@font-face {
+  font-family: "Literata";
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url("@fontsource-variable/literata/files/literata-latin-wght-normal.woff2")
+    format("woff2-variations");
+}
+@font-face {
+  font-family: "Literata";
+  font-style: italic;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url("@fontsource-variable/literata/files/literata-latin-wght-italic.woff2")
+    format("woff2-variations");
+}

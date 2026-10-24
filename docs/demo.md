@@ -14,8 +14,8 @@ Check Sources after each step. If Google AI Overview cannot be extracted, explic
 | --------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0:00–0:20 | Real research tabs and RabbitHole           | “After a research session, it can be hard to explain how the ideas fit together.” Use a personal story only if Anshul confirms it happened. |
 | 0:20–1:05 | Start, search, follow article, highlight    | Show automatic capture, included-tab scope, Sources, and the distinction between saved and processed.                                       |
-| 1:05–1:55 | Open in Go, actual tools                    | Paste/send the prompt, show GetSession with genuine captures and a confirmed SaveSessionAnalysis. Label any shortened wait clearly.         |
-| 1:55–2:40 | Sync, map, one edge and evidence            | Explain a meaningful relation Go inferred from this particular trail. Show support versus inference.                                        |
+| 1:05–1:55 | Send to Go, actual tools                    | Paste/send the prompt, show GetSession with genuine captures and a confirmed SaveSessionAnalysis. Label any shortened wait clearly.         |
+| 1:55–2:40 | Saved map, one edge and evidence            | Explain a meaningful relation Go inferred from this particular trail. Show support versus inference.                                        |
 | 2:40–3:25 | Explain the connection, then quiz/flashcard | Attempt the answer before revealing it. Self-rate honestly. Show a source-backed answer and persistent attempt.                             |
 | 3:25–3:50 | Reopen; incremental update if rehearsed     | Show saved progress and a genuinely new pending capture merged into the same session.                                                       |
 | 3:50–4:00 | Product and architecture                    | “The extension keeps my trail. Go connects the evidence. Practice asks me to explain it.”                                                   |

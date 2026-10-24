@@ -269,6 +269,31 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
     }
     if (!internal)
       throw new Error("This operation is available only in RabbitHole");
+    if (msg.type === "ui-context") {
+      const [tab] = await chrome.tabs.query({
+        active: true,
+        lastFocusedWindow: true,
+      });
+      return {
+        tabId: tab?.id,
+        url: tab?.url ?? "",
+        title: tab?.title ?? "",
+        regular: !tab?.incognito && /^https?:/.test(tab?.url ?? ""),
+        included: tab?.id !== undefined && s.tabs[tab.id] === s.active,
+        count: Object.values(s.tabs).filter((id) => id === s.active).length,
+        excluded:
+          !!tab?.url && (s.excluded[s.active ?? ""] ?? []).includes(tab.url),
+      };
+    }
+    if (msg.type === "open-panel") {
+      const [tab] = await chrome.tabs.query({
+        active: true,
+        lastFocusedWindow: true,
+      });
+      if (tab?.windowId !== undefined)
+        await chrome.sidePanel.open({ windowId: tab.windowId });
+      return s;
+    }
     if (msg.type === "state") return s;
     if (msg.type === "config") {
       const url = new URL(msg.config.backend);
@@ -373,6 +398,11 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
           ...new Set([...(s.excluded[s.active] ?? []), tab.url]),
         ];
       }
+    }
+    if (msg.type === "unexclude" && s.active) {
+      s.excluded[s.active] = (s.excluded[s.active] ?? []).filter(
+        (url) => url !== msg.url,
+      );
     }
     if (msg.type === "delete") {
       delete s.sessions[msg.id];

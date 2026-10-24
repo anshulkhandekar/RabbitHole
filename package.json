@@ -20,6 +20,8 @@
     "lint": "prettier --check apps packages tests scripts integrations docs/*.md README.md package.json tsconfig.json render.yaml"
   },
   "dependencies": {
+    "@fontsource-variable/geologica": "^5.3.0",
+    "@fontsource-variable/literata": "^5.3.0",
     "@modelcontextprotocol/sdk": "1.32.2",
     "@mozilla/readability": "0.6.0",
     "@xyflow/react": "12.12.0",

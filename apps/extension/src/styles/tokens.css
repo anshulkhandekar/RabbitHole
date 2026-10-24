@@ -1,0 +1,121 @@
+/* RabbitHole design tokens.
+   Source of truth for color, type, spacing, radius, motion.
+   Port as-is into apps/extension (e.g. src/styles/tokens.css) and reference only these vars. */
+
+@import url("https://fonts.googleapis.com/css2?family=Geologica:wght@300..700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;1,7..72,400&display=swap");
+/* In the extension, bundle fonts locally instead: @fontsource-variable/geologica + @fontsource-variable/literata */
+
+:root {
+  /* Surface — cool lilac paper, never cream */
+  --paper: #F4F3F8;
+  --surface: #FFFFFF;
+  --surface-sunk: #ECEAF2;
+  --line: #E1DEEA;
+  --line-strong: #CBC6D9;
+
+  /* Ink — deep plum, not neutral near-black */
+  --ink: #1E1833;
+  --ink-2: #57516B;
+  --ink-3: #8A849C;
+
+  /* Accent — one violet, used for primary action + selection */
+  --violet: #5638E8;
+  --violet-hover: #4529D1;
+  --violet-soft: #ECE8FE;
+  --violet-ink: #3A23B0;
+
+  /* Lantern — ONLY for live capture, new/unprocessed finds, and highlights */
+  --lantern: #F2B23E;
+  --lantern-soft: #FFF3D9;
+  --lantern-ink: #8A5A00;
+
+  /* Status */
+  --moss: #2E9466;
+  --moss-soft: #E2F4EB;
+  --ember: #D2443B;
+  --ember-soft: #FCE9E7;
+
+  /* Burrow — the map canvas (always dark, in both themes) */
+  --burrow: #16112A;
+  --burrow-2: #1F1838;
+  --burrow-grid: rgba(255,255,255,0.04);
+  --tunnel: #3D3366;
+  --tunnel-lit: #A996FF;
+  --chamber: #2A2249;
+  --chamber-line: #4A3F7A;
+  --chamber-ink: #EDE9FF;
+  --burrow-ink-2: #9A92BF;
+
+  /* Type */
+  --font-ui: "Geologica", system-ui, sans-serif;
+  --font-source: "Literata", Georgia, serif; /* original captured words only */
+
+  /* Modular scale, ratio 1.2 from 14px */
+  --t-xs: 11.5px;
+  --t-sm: 12.5px;
+  --t-base: 14px;
+  --t-md: 16.8px;
+  --t-lg: 20px;
+  --t-xl: 24px;
+  --t-2xl: 29px;
+  --t-3xl: 35px;
+
+  /* Spacing — 4px grid */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px;
+  --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px; --s-12: 48px;
+
+  /* Radius — hierarchy, not one value everywhere */
+  --r-chip: 999px;
+  --r-control: 10px;
+  --r-panel: 16px;
+  --r-chamber: 14px;
+
+  --shadow-lift: 0 1px 0 rgba(30,24,51,.04), 0 6px 20px -8px rgba(30,24,51,.18);
+  --shadow-pop: 0 18px 50px -12px rgba(22,17,42,.45);
+
+  --ease-out: cubic-bezier(.22,1,.36,1);
+  --ease-spring: cubic-bezier(.34,1.4,.64,1);
+  --d-fast: 140ms;
+  --d-med: 260ms;
+  --d-slow: 520ms;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #120E20;
+    --surface: #1A1530;
+    --surface-sunk: #231C3E;
+    --line: #2C2547;
+    --line-strong: #3E3563;
+    --ink: #F0EDFA;
+    --ink-2: #B3ACCB;
+    --ink-3: #7F779C;
+    --violet: #8B73FF;
+    --violet-hover: #A08CFF;
+    --violet-soft: #2A2152;
+    --violet-ink: #C9BDFF;
+    --lantern-soft: #3A2C10;
+    --lantern-ink: #FFD27A;
+    --moss-soft: #12301F;
+    --ember-soft: #3A1614;
+    --burrow: #0C0919;
+    --burrow-2: #140F26;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #120E20; --surface: #1A1530; --surface-sunk: #231C3E;
+  --line: #2C2547; --line-strong: #3E3563;
+  --ink: #F0EDFA; --ink-2: #B3ACCB; --ink-3: #7F779C;
+  --violet: #8B73FF; --violet-hover: #A08CFF; --violet-soft: #2A2152; --violet-ink: #C9BDFF;
+  --lantern-soft: #3A2C10; --lantern-ink: #FFD27A;
+  --moss-soft: #12301F; --ember-soft: #3A1614;
+  --burrow: #0C0919; --burrow-2: #140F26;
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --d-fast: 0ms; --d-med: 0ms; --d-slow: 0ms; }
+}

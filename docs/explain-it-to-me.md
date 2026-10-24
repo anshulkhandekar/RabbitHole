@@ -4,7 +4,7 @@
 
 **Minute 2 — persistence and boundaries.** Show Sources and the captured/pending status. Local extension storage keeps research while offline. The worker sends queued mutations with your personal token. An Express API derives your owner from authentication, validates data, and persists it to SQLite. The public deployment mounts a persistent disk, so redeploys do not erase research. Unrelated tabs stay excluded unless they have an included opener or you explicitly include them.
 
-**Minute 3 — Go does the thinking.** Open in Go copies a prompt and opens the configured URL; sending it is a user action. Go reads through GetSession, reasons over the actual captures and preferences, and asks to save using SaveSessionAnalysis. The connector is a bridge to tools, not a trigger. Go is the generative engine; the backend has no external LLM API key.
+**Minute 3 — Go does the thinking.** Send to Go copies a prompt and opens the configured URL; sending it is a user action. Go reads through GetSession, reasons over the actual captures and preferences, and asks to save using SaveSessionAnalysis. The connector is a bridge to tools, not a trigger. Go is the generative engine; the backend has no external LLM API key.
 
 **Minute 4 — evidence and change.** Inspect an idea and an edge in Explore. Both link to captured sources. Direct support and inferred relationships differ. SaveSessionAnalysis checks expectedVersion and evidence IDs. If more research arrives while Go is thinking, it stays pending. A later run merges into the existing graph. Invalid or stale writes cannot partly update it.
 

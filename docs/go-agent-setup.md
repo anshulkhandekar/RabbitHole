@@ -30,13 +30,13 @@ In extension Settings, enter your backend URL, your own token, and the real save
 
 ## 4. Prove the first round trip
 
-1. Install the extension, configure it, start on a real research tab, and capture one source. Use Sync & check Go.
-2. Click Open in Go. The extension attempts to copy a session-specific prompt and opens the configured URL. Send/paste the prompt in the agent chat.
+1. Install the extension, configure it, start on a real research tab, and capture one source. Wait for the synced status.
+2. Click Send to Go. The extension attempts to copy a session-specific prompt and opens the configured URL. Send/paste the prompt in the agent chat.
 3. Observe a real GetSession call and source content, generation in Go, then SaveSessionAnalysis. Approve the write if prompted. The tool must return a version and pending count.
-4. Return and click Sync & check Go. Verify the exact saved title, concepts, and evidence are displayed. Export JSON and compare its `analysis` to the actual tool call when debugging.
+4. Return to the extension; it automatically polls for the saved analysis. Verify the exact saved title, concepts, and evidence are displayed. Export JSON and compare its `analysis` to the actual tool call when debugging.
 5. Record the run date, agent link, write approval behavior, and result in status.md. Only then mark Gate A live-verified.
 
-Normal processing requires **at least four actions after capture**: open Go, paste/send the prompt (one or two actions depending on clipboard and focus), approve the save if requested, then sync the extension. If paste and send are separate, that is five. Native Go focus/navigation or authentication can add actions. The live test used six discrete actions from unsynced captures: Sync, Open in Go, paste, Send, Approve, Sync. If retry has already synced captures, five remain. Returning/focusing the extension may add navigation. The UI never says opening Go started reasoning.
+The redesigned flow is Send to Go, paste, Send, then Approve if Go requests a write. Navigation/authentication may add actions. The extension then observes the saved version automatically. This handoff and polling were tested with a synthetic destination and saved fixture; the earlier live account test used the previous six-action UI (Sync, Open in Go, paste, Send, Approve, Sync). Opening Go never means reasoning has started.
 
 ## 5. Scheduling later
 

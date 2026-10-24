@@ -1,0 +1,508 @@
+/* RabbitHole shared components. Depends on tokens.css.
+   Each block maps to one React component (named in the comment). */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+}
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--t-base);
+  line-height: 1.5;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+}
+button {
+  font: inherit;
+  color: inherit;
+}
+a {
+  color: inherit;
+}
+.ic {
+  flex: none;
+  display: block;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+:focus-visible {
+  outline: 2px solid var(--violet);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ---------- <Button> ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  height: 34px;
+  padding: 0 var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--t-base);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  transition:
+    background var(--d-fast),
+    border-color var(--d-fast),
+    transform var(--d-fast);
+}
+.btn:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-sunk);
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn .ic {
+  color: var(--ink-2);
+}
+.btn-primary {
+  background: var(--violet);
+  border-color: var(--violet);
+  color: var(--chamber-ink);
+}
+.btn-primary .ic {
+  color: currentColor;
+}
+.btn-primary:hover {
+  background: var(--violet-hover);
+  border-color: var(--violet-hover);
+}
+.btn-quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-2);
+}
+.btn-quiet:hover {
+  background: var(--surface-sunk);
+  border-color: transparent;
+  color: var(--ink);
+}
+.btn-lg {
+  height: 42px;
+  padding: 0 var(--s-5);
+  font-size: var(--t-base);
+  border-radius: 12px;
+}
+.btn-block {
+  width: 100%;
+}
+
+/* ---------- <IconButton> (always has aria-label + tooltip) ---------- */
+.icon-btn {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-control);
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition:
+    background var(--d-fast),
+    color var(--d-fast);
+}
+.icon-btn:hover {
+  background: var(--surface-sunk);
+  color: var(--ink);
+}
+.icon-btn[data-tip]:hover::after,
+.icon-btn[data-tip]:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 20;
+}
+
+/* ---------- <Brand> ---------- */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 650;
+  font-size: var(--t-md);
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+.brand .mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: var(--violet-soft);
+  color: var(--violet);
+}
+
+/* ---------- <LiveStatus> lantern: replaces the green dot + "COLLECTING IN INCLUDED TABS" ---------- */
+.lantern {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lantern);
+  flex: none;
+}
+.lantern::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: var(--lantern);
+  opacity: 0.35;
+  animation: lantern 2.4s var(--ease-out) infinite;
+}
+.lantern.off {
+  background: var(--ink-3);
+}
+.lantern.off::after {
+  display: none;
+}
+@keyframes lantern {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.45;
+  }
+  70%,
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lantern::after {
+    animation: none;
+    opacity: 0.25;
+  }
+}
+
+/* ---------- <Chip> ---------- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--r-chip);
+  font-size: var(--t-xs);
+  font-weight: 550;
+  white-space: nowrap;
+  background: var(--surface-sunk);
+  color: var(--ink-2);
+}
+.chip-new {
+  background: var(--lantern-soft);
+  color: var(--lantern-ink);
+}
+.chip-done {
+  background: var(--moss-soft);
+  color: var(--moss);
+}
+.chip-violet {
+  background: var(--violet-soft);
+  color: var(--violet-ink);
+}
+.chip-error {
+  background: var(--ember-soft);
+  color: var(--ember);
+}
+.chip .ic {
+  width: 12px;
+  height: 12px;
+}
+
+/* ---------- <Segmented> view switch (Map / Practice / Sources) ---------- */
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  background: var(--surface-sunk);
+  border-radius: 12px;
+}
+.segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--t-base);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--d-fast),
+    color var(--d-fast),
+    box-shadow var(--d-fast);
+}
+.segmented button:hover {
+  color: var(--ink);
+}
+.segmented button[aria-selected="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-lift);
+}
+.segmented button[aria-selected="true"] .ic {
+  color: var(--violet);
+}
+.segmented .count {
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+/* ---------- <Trail> the descending burrow line (sidebar + Sources view) ---------- */
+.trail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+.trail::before {
+  content: "";
+  position: absolute;
+  left: 15px;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to bottom,
+    var(--line-strong),
+    var(--violet) 140%
+  );
+}
+.stop {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  column-gap: var(--s-3);
+  padding: 7px 0;
+}
+.stop-node {
+  position: relative;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  border: 1.5px solid var(--line-strong);
+  color: var(--ink-2);
+}
+.stop.is-child .stop-node {
+  width: 22px;
+  height: 22px;
+  margin: 5px;
+  border-width: 1.5px;
+}
+.stop.is-child .stop-node .ic {
+  width: 13px;
+  height: 13px;
+}
+.stop.is-pending .stop-node {
+  border-color: var(--lantern);
+  color: var(--lantern-ink);
+  background: var(--lantern-soft);
+}
+.stop.is-highlight .stop-node {
+  background: var(--lantern);
+  border-color: var(--lantern);
+  color: var(--burrow);
+}
+.stop-body {
+  min-width: 0;
+  padding-top: 5px;
+}
+.stop.is-child .stop-body {
+  padding-top: 6px;
+}
+.stop-title {
+  display: block;
+  font-size: var(--t-base);
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--ink);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.stop.kind-search .stop-title::before {
+  content: "“";
+  color: var(--ink-3);
+}
+.stop.kind-search .stop-title::after {
+  content: "”";
+  color: var(--ink-3);
+}
+a.stop-title:hover {
+  color: var(--violet);
+}
+.stop-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: 3px;
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+}
+.stop-quote {
+  margin: 6px 0 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--lantern-soft);
+  color: var(--ink);
+  font-family: var(--font-source);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+.stop.is-new {
+  animation: drop var(--d-slow) var(--ease-spring) both;
+}
+.stop.is-new .stop-node {
+  animation: glow 1.6s var(--ease-out) both;
+}
+@keyframes drop {
+  from {
+    opacity: 0;
+    transform: translateY(-18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes glow {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--lantern) 70%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 14px transparent;
+  }
+}
+
+/* ---------- <SourceQuote> original captured words: always Literata ---------- */
+.source-quote {
+  margin: 0;
+  padding: var(--s-3) var(--s-4);
+  border-left: 3px solid var(--lantern);
+  border-radius: 0 10px 10px 0;
+  background: var(--surface-sunk);
+  font-family: var(--font-source);
+  font-size: var(--t-base);
+  line-height: 1.6;
+  color: var(--ink);
+}
+.source-quote footer {
+  margin-top: 6px;
+  font-family: var(--font-ui);
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.source-quote footer a {
+  color: var(--ink-2);
+  text-underline-offset: 2px;
+}
+.source-quote footer a:hover {
+  color: var(--violet);
+}
+
+/* ---------- <Textarea> ---------- */
+.field {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  padding: var(--s-3) var(--s-4);
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--t-base);
+  line-height: 1.55;
+  transition:
+    border-color var(--d-fast),
+    box-shadow var(--d-fast);
+}
+.field::placeholder {
+  color: var(--ink-3);
+}
+.field:focus {
+  outline: none;
+  border-color: var(--violet);
+  box-shadow: 0 0 0 4px var(--violet-soft);
+}
+
+/* ---------- <Toast> ---------- */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translate(-50%, 20px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  box-shadow: var(--shadow-pop);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--d-med),
+    transform var(--d-med) var(--ease-out);
+  z-index: 50;
+}
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.toast .ic {
+  color: currentColor;
+}

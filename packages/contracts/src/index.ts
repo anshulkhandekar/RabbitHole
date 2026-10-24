@@ -104,7 +104,7 @@ export const Review = z.object({
   studyId: Id,
   analysisVersion: z.number().int().positive(),
   response: z.string().max(3000).default(""),
-  rating: z.enum(["again", "understood"]),
+  rating: z.enum(["again", "partly", "understood"]),
   choice: z.number().int().min(0).optional(),
   timestamp: z.string().datetime(),
 });

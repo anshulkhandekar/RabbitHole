@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { createApp } from "../apps/server/src/app";
 import { Store } from "../apps/server/src/store";
 import { analysis } from "./support";
@@ -49,7 +49,14 @@ const context = await chromium.launchPersistentContext(profile, {
   ],
 });
 const failures: string[] = [];
-context.on("page", (p) => p.on("pageerror", (e) => failures.push(e.message)));
+const remoteFontRequests: string[] = [];
+context.on("request", (r) => {
+  if (/fonts\.(googleapis|gstatic)\.com/.test(r.url()))
+    remoteFontRequests.push(r.url());
+});
+context.on("page", (p) =>
+  p.on("pageerror", (e) => failures.push(`${p.url()}: ${e.stack}`)),
+);
 try {
   const worker =
     context.serviceWorkers()[0] ??
@@ -62,15 +69,14 @@ try {
     .getByLabel("Backend URL", { exact: true })
     .fill(`http://127.0.0.1:${port}`);
   await ui.getByLabel("Personal bearer token").fill(token);
+  await ui.getByLabel("Go agent URL").fill("https://handoff.example/agent");
   // Grant website access through the extension UI; Chrome headless has no native permission bubble.
   await ui.getByRole("button", { name: "Save connection" }).click();
-  await ui
-    .getByRole("button", { name: "Start on your current tab →" })
-    .waitFor();
+  await ui.getByRole("button", { name: "Start collecting" }).waitFor();
   const research = await context.newPage();
   await research.route("https://www.google.com/**", (r) =>
     r.fulfill({
-      contentType: "text/html",
+      contentType: "text/html; charset=utf-8",
       body: "<html><head><title>GPU research — test fixture</title></head><body><main><h1>GPU research</h1><p>Search fixture only.</p></main></body></html>",
     }),
   );
@@ -82,6 +88,16 @@ try {
   );
   assert.ok(!start.error, JSON.stringify(start));
   const sessionId = start.active as string;
+  const tabContext = await ui.evaluate(() =>
+    chrome.runtime.sendMessage({ type: "ui-context" }),
+  );
+  assert.equal(
+    tabContext.included,
+    true,
+    "UI context must describe actual tab membership",
+  );
+  assert.equal(tabContext.count, 1);
+
   await research.waitForTimeout(1800);
   let state = await ui.evaluate(() =>
     chrome.runtime.sendMessage({ type: "state" }),
@@ -89,7 +105,7 @@ try {
   assert.equal(state.sessions[sessionId].captures[0]?.sourceType, "search");
   await research.route("https://research.example/**", (r) =>
     r.fulfill({
-      contentType: "text/html",
+      contentType: "text/html; charset=utf-8",
       body: `<html><head><title>Parallel computing — test fixture</title></head><body><article><h1>How parallel execution works</h1><p id="passage">${"A GPU uses parallel execution to process many operations at once. ".repeat(14)}</p><p>Independent operations can run together. This is synthetic test material.</p></article><input value="DO NOT CAPTURE PASSWORD"><div contenteditable="true">DO NOT CAPTURE EDITABLE TEXT</div></body></html>`,
     }),
   );
@@ -158,7 +174,10 @@ try {
   await ui.bringToFront();
   const unrelated = await context.newPage();
   await unrelated.route("https://www.google.com/**", (r) =>
-    r.fulfill({ body: "<h1>Unrelated search</h1>", contentType: "text/html" }),
+    r.fulfill({
+      body: "<h1>Unrelated search</h1>",
+      contentType: "text/html; charset=utf-8",
+    }),
   );
   await unrelated.goto("https://www.google.com/search?q=Unrelated");
   await unrelated.waitForTimeout(1800);
@@ -179,7 +198,38 @@ try {
     state.sessions[sessionId].captures.some((c: any) => c.text === "Unrelated"),
   );
   await ui.evaluate(() => chrome.runtime.sendMessage({ type: "refresh" }));
-  const fixture = analysis();
+  // Handoff opens a test Go page, never invokes generation or writes a fixture itself.
+  await context.route("https://handoff.example/**", (route) =>
+    route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: "<h1>Synthetic Go handoff destination</h1>",
+    }),
+  );
+  await ui.setViewportSize({ width: 320, height: 850 });
+  await ui.bringToFront();
+  await ui.getByRole("button", { name: "Send to Go", exact: true }).click();
+  const handoffPrompt = await ui
+    .getByLabel("Go processing prompt")
+    .inputValue();
+  assert.ok(handoffPrompt.includes(sessionId));
+  await ui.getByText("Paste it into Go and send", { exact: true }).waitFor();
+  assert.equal(await ui.getByText(/Map updated at/).count(), 0);
+  await ui.screenshot({
+    path: "test-results/sidebar-handoff.png",
+    fullPage: true,
+  });
+  await ui.setViewportSize({ width: 1280, height: 800 });
+  await ui.evaluate(
+    (id) =>
+      chrome.runtime.sendMessage({
+        type: "patch",
+        id,
+        patch: { status: "paused" },
+      }),
+    sessionId,
+  );
+  const fixture: import("../packages/contracts/src/index").AnalysisData =
+    analysis();
   fixture.sessionId = sessionId;
   fixture.processedCaptureIds = store
     .get("test", sessionId)
@@ -192,52 +242,239 @@ try {
   fixture.concepts.forEach((c) => (c.captureIds = [evidence]));
   fixture.edges.forEach((c) => (c.captureIds = [evidence]));
   fixture.studyItems.forEach((c) => (c.captureIds = [evidence]));
+  fixture.concepts[1].captureIds = [
+    store
+      .get("test", sessionId)
+      .captures.find((c) => c.sourceType === "highlight")!.id,
+  ];
+  fixture.concepts[1].gap = "Which operations cannot run independently?";
+  fixture.edges.push({
+    ...fixture.edges[0],
+    id: "e2",
+    source: "n2",
+    target: "n1",
+    label: "can accelerate",
+    evidenceKind: "inference" as any,
+  });
   fixture.title = "SYNTHETIC UI TEST · Parallel computing";
+  console.log("CHECK fixture saved");
   store.save("test", fixture);
   await ui.bringToFront();
-  await ui.getByRole("button", { name: "Sync & check Go" }).click();
-  await ui.getByRole("heading", { name: fixture.title }).waitFor();
+  await ui.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  await ui.getByRole("heading", { name: fixture.title, exact: true }).waitFor();
+  await ui.getByRole("button", { name: "Dismiss", exact: true }).click();
+  console.log("CHECK select chamber");
+  await ui.locator('.react-flow__node[data-id="n1"]').focus();
+  await ui.keyboard.press("Space");
+  await ui.getByRole("heading", { name: "GPU", exact: true }).waitFor();
+  await ui.getByText("Where you read it", { exact: true }).waitFor();
+  assert.ok(
+    (
+      await ui
+        .locator(".quoted-text")
+        .first()
+        .evaluate((el) => getComputedStyle(el).fontFamily)
+    ).includes("Literata"),
+  );
+  console.log("CHECK check lit labels");
+  await expect(ui.locator(".edge-label.visible")).toHaveCount(2);
+  assert.equal(await ui.locator(".tunnel.inferred").count(), 1);
+  await ui.getByText("Depth 3", { exact: true }).waitFor();
+  await ui.keyboard.press("Escape");
+  await expect(ui.locator(".edge-label.visible")).toHaveCount(0);
   await ui.getByRole("button", { name: "List view", exact: true }).click();
-  await ui
-    .getByRole("button", { name: "GPU A processor", exact: false })
-    .click();
-  await ui.getByText("BACK TO THE SOURCE", { exact: true }).waitFor();
+  await ui.getByRole("button", { name: "GPU", exact: true }).click();
+  await ui.getByRole("button", { name: "Map view", exact: true }).click();
+  console.log("CHECK check responsive inspector");
+  await ui.setViewportSize({ width: 880, height: 800 });
+  assert.equal(await ui.locator(".rail").isVisible(), false);
+  const burrowBox = await ui.locator(".burrow").boundingBox(),
+    inspectorBox = await ui.locator(".inspector").boundingBox();
+  assert.ok(inspectorBox!.y >= burrowBox!.y + burrowBox!.height - 1);
+  await ui.setViewportSize({ width: 1280, height: 800 });
+  console.log("CHECK wait for toast");
+  await ui.waitForFunction(() => !document.querySelector(".toast.show"));
   await ui.screenshot({ path: "test-results/workspace.png", fullPage: true });
-  await ui.getByRole("button", { name: "Practice", exact: false }).click();
+  await ui.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  await ui.screenshot({
+    path: "test-results/workspace-dark.png",
+    fullPage: true,
+  });
+  await ui.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  await ui.getByRole("tab", { name: "Practice", exact: true }).click();
   await ui
     .getByLabel("Your explanation")
     .fill("It runs independent operations at once.");
-  await ui.getByRole("button", { name: "Reveal model explanation" }).click();
-  // A completed save must belong to the reviewed item even if the user changes mode.
+  await ui
+    .getByRole("button", { name: "Reveal explanation", exact: true })
+    .click();
+  console.log("CHECK practice partial");
   reviewGate = new Promise<void>((resolve) => {
     releaseReview = resolve;
   });
   const reviewRequest = new Promise<void>((resolve) => {
     reviewStarted = resolve;
   });
-  await ui.getByRole("button", { name: "Understood", exact: true }).click();
-  await reviewRequest;
-  await ui.getByRole("button", { name: "Flashcards", exact: true }).click();
+  await ui.getByRole("button", { name: "Partly", exact: true }).click();
+  await Promise.race([
+    reviewRequest,
+    new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error("Review request did not reach the backend")),
+        15000,
+      ),
+    ),
+  ]);
+  await ui.getByRole("tab", { name: "Flashcards", exact: true }).click();
   releaseReview!();
+  await ui.getByRole("button", { name: "Flip card", exact: true }).waitFor();
+  assert.equal(
+    await ui.getByRole("button", { name: "Got it", exact: true }).isEnabled(),
+    false,
+  );
   await ui
-    .getByRole("button", { name: "Sync & check Go" })
+    .getByRole("button", { name: "Flip card", exact: true })
+    .press("Space");
+  await ui
+    .getByRole("button", { name: "Got it", exact: true })
     .waitFor({ state: "visible" });
-  await ui.getByRole("button", { name: "Reveal model explanation" }).click();
-  await ui
-    .getByRole("button", { name: "Understood", exact: true })
-    .waitFor({ timeout: 5000 });
+  await ui.waitForFunction(
+    () =>
+      !document.querySelector<HTMLButtonElement>(".card-btns .btn-primary")
+        ?.disabled,
+  );
+  assert.equal(
+    await ui
+      .getByRole("button", { name: "Flip card", exact: true })
+      .evaluate((el) => getComputedStyle(el).transform),
+    "none",
+  );
   reviewGate = undefined;
-  await ui.getByRole("button", { name: "Short quiz", exact: true }).click();
-  await ui.getByRole("button", { name: "B. Parallel execution" }).click();
-  await ui.getByRole("button", { name: "Check answer" }).click();
-  await ui.getByText("CORRECT", { exact: true }).waitFor();
-  await ui.getByRole("button", { name: "Flashcards", exact: true }).click();
-  await ui.getByRole("button", { name: "Reveal model explanation" }).click();
+  assert.equal(store.get("test", sessionId).attempts[0].rating, "partly");
+  await ui.getByRole("tab", { name: "Quiz", exact: true }).click();
+  await ui
+    .getByRole("button", { name: "B Parallel execution", exact: true })
+    .click();
+  await ui.getByText("Correct", { exact: true }).waitFor();
+  await ui.getByRole("tab", { name: /^Sources/ }).click();
+  await ui.getByText("On the map", { exact: true }).first().waitFor();
   await ui.reload();
-  await ui.getByRole("heading", { name: fixture.title }).waitFor();
+  await ui.getByRole("heading", { name: fixture.title, exact: true }).waitFor();
   assert.equal(store.get("test", sessionId).attempts.length, 1);
-  await ui.setViewportSize({ width: 380, height: 850 });
-  await ui.screenshot({ path: "test-results/sidebar.png", fullPage: true });
+  // Exercise the real packaged panel at 320px, both colour schemes and reduced motion.
+  await ui.setViewportSize({ width: 320, height: 850 });
+  for (const scheme of ["light", "dark"] as const) {
+    await ui.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+    await ui.locator(".panel").waitFor();
+    assert.equal(await ui.locator(".p-foot .btn-primary").count(), 1);
+    assert.equal(
+      await ui
+        .getByRole("button", { name: "Send to Go", exact: true })
+        .isEnabled(),
+      false,
+    );
+    assert.equal(
+      await ui.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      true,
+    );
+    assert.equal(
+      await ui.evaluate(
+        () =>
+          getComputedStyle(document.querySelector(".lantern")!, "::after")
+            .animationDuration,
+      ),
+      "0s",
+    );
+    assert.equal(
+      await ui.evaluate(() => getComputedStyle(document.body).backgroundColor),
+      scheme === "dark" ? "rgb(18, 14, 32)" : "rgb(244, 243, 248)",
+    );
+    await ui.screenshot({
+      path: `test-results/sidebar-320-${scheme}.png`,
+      fullPage: true,
+    });
+  }
+  await ui
+    .getByRole("button", { name: "Switch rabbit hole", exact: true })
+    .press("ArrowDown");
+  await ui.getByRole("menuitem", { name: /Start a new rabbit hole/ }).waitFor();
+  await ui.keyboard.press("Escape");
+  await expect(
+    ui.getByRole("button", { name: "Switch rabbit hole", exact: true }),
+  ).toBeFocused();
+  await ui.getByRole("button", { name: "Settings", exact: true }).click();
+  await ui.getByLabel("Appearance", { exact: true }).selectOption("dark");
+  await ui.getByRole("button", { name: "Close settings", exact: true }).click();
+  await ui.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  assert.equal(
+    await ui.evaluate(() => getComputedStyle(document.body).backgroundColor),
+    "rgb(18, 14, 32)",
+  );
+  await ui.reload();
+  await ui.locator('html[data-theme="dark"]').waitFor();
+  await ui.getByRole("button", { name: "Settings", exact: true }).click();
+  await ui.getByLabel("Appearance", { exact: true }).selectOption("system");
+  await ui.getByRole("button", { name: "Close settings", exact: true }).click();
+  await ui.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  console.log("CHECK wait for fonts");
+  await ui.evaluate(async () => {
+    await document.fonts.ready;
+    return true;
+  });
+  assert.equal(
+    await ui.evaluate(() => document.fonts.check('500 14px "Geologica"')),
+    true,
+  );
+  await context.setOffline(true);
+  await ui
+    .getByText(
+      "You’re offline. New finds are saved on this device and will sync later.",
+      { exact: true },
+    )
+    .waitFor();
+  assert.equal(
+    await ui
+      .getByRole("button", { name: "Send to Go", exact: true })
+      .isEnabled(),
+    false,
+  );
+  await ui.screenshot({
+    path: "test-results/sidebar-offline.png",
+    fullPage: true,
+  });
+  await context.setOffline(false);
+  await ui.evaluate(
+    (id) =>
+      chrome.runtime.sendMessage({
+        type: "patch",
+        id,
+        patch: { status: "paused" },
+      }),
+    sessionId,
+  );
+  await ui.getByRole("button", { name: "Resume", exact: true }).waitFor();
+  await ui.screenshot({
+    path: "test-results/sidebar-paused.png",
+    fullPage: true,
+  });
+  // Membership display is derived from the actual active tab; exclusion is reversible.
+  await unrelated.bringToFront();
+  await ui.evaluate(() => chrome.runtime.sendMessage({ type: "exclude" }));
+  let excludedContext = await ui.evaluate(() =>
+    chrome.runtime.sendMessage({ type: "ui-context" }),
+  );
+  assert.equal(excludedContext.excluded, true);
+  await ui.evaluate(
+    (url) => chrome.runtime.sendMessage({ type: "unexclude", url }),
+    unrelated.url(),
+  );
+  excludedContext = await ui.evaluate(() =>
+    chrome.runtime.sendMessage({ type: "ui-context" }),
+  );
+  assert.equal(excludedContext.excluded, false);
+  await ui.bringToFront();
   // Interrupt delivery, then restart the entire browser profile with a queued review.
   backendAvailable = false;
   const queued = await ui.evaluate(
@@ -302,11 +539,39 @@ try {
     await restored.close();
   }
   assert.deepEqual(failures, []);
+  assert.deepEqual(remoteFontRequests, []);
   console.log(
-    "PASS packaged Chrome extension: pregranted website permissions (native prompt untested), automatic search/article capture, input exclusion, highlight, pause, unrelated tab exclusion, explicit include, authenticated sync, persisted fixture display, evidence, recall progress, quiz, flashcard, reload, narrow layout, interrupted delivery, browser profile restart with queued review, retry, and offline deletion without resurrection. Go generation NOT exercised.",
+    "PASS redesign: 320px light/dark, offline/paused/handoff states, single primary action, real evidence depth, inferred tunnels, keyboard selection, local fonts, partial ratings and practice-mode save race; packaged Chrome extension: pregranted website permissions (native prompt untested), automatic search/article capture, input exclusion, highlight, pause, unrelated tab exclusion, explicit include, authenticated sync, persisted fixture display, evidence, recall progress, quiz, flashcard, reload, narrow layout, interrupted delivery, browser profile restart with queued review, retry, and offline deletion without resurrection. Go generation NOT exercised.",
   );
+} catch (error) {
+  console.error("UI failures:", failures);
+  const page = context
+    .pages()
+    .find((p) => p.url().startsWith("chrome-extension:"));
+  if (page) {
+    console.error(
+      "Graph DOM",
+      await page
+        .locator(".react-flow__edges")
+        .evaluateAll((es) => es.map((e) => e.outerHTML.slice(0, 6000))),
+    );
+    console.error(
+      "Labels",
+      await page
+        .locator(".edge-label")
+        .evaluateAll((es) => es.map((e) => ({ html: e.outerHTML }))),
+    );
+    console.error((await page.locator("body").innerText()).slice(0, 5000));
+    await page.screenshot({
+      path: "test-results/redesign-failure.png",
+      fullPage: true,
+    });
+  }
+  throw error;
 } finally {
+  releaseReview?.();
   await context.close();
+  server.closeAllConnections();
   await new Promise<void>((r) => server.close(() => r()));
   store.db.close();
   rmSync(profile, { recursive: true, force: true });

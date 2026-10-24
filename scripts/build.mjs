@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { mkdir, writeFile, copyFile, rm } from "node:fs/promises";
+import { mkdir, writeFile, copyFile, rm, cp, readFile } from "node:fs/promises";
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist/extension", { recursive: true });
 await build({
@@ -9,6 +9,25 @@ await build({
   format: "esm",
   target: "chrome120",
   minify: true,
+  loader: { ".woff2": "file" },
+  assetNames: "fonts/[name]-[hash]",
+  plugins: [
+    {
+      name: "local-fonts-only",
+      setup(builder) {
+        builder.onLoad(
+          { filter: /styles\/tokens\.css$/ },
+          async ({ path }) => ({
+            contents: (await readFile(path, "utf8")).replace(
+              /@import url\("https:\/\/fonts\.googleapis[^"]+"\);/,
+              "",
+            ),
+            loader: "css",
+          }),
+        );
+      },
+    },
+  ],
 });
 await build({
   entryPoints: {
@@ -22,6 +41,7 @@ await build({
   minify: true,
 });
 await copyFile("apps/extension/manifest.json", "dist/extension/manifest.json");
+await cp("apps/extension/public", "dist/extension", { recursive: true });
 await writeFile(
   "dist/extension/index.html",
   '<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RabbitHole · make connections</title><link rel="stylesheet" href="ui.css"></head><body><div id="root"></div><script type="module" src="ui.js"></script></body></html>',

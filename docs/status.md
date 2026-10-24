@@ -6,17 +6,21 @@
 - Explicit session start/pause/resume/finish/reopen/rename/delete/export, saved preferences, scoped opener-tab collection, explicit include/exclude.
 - Automatic Google query capture, bounded Readability article extraction, conservative overview adapter, selected-text shortcut/context menu.
 - Persistent local mutations and retry alarms; authenticated ownership; duplicate protection; transactional analysis saves; version/reference/quiz validation; later captures remain pending.
-- Explore graph/list, node/edge evidence, chronology, honest Go prompt handoff, connection recall, flashcards, deterministic quiz, versioned attempts.
+- Evidence-depth map/list, node/edge evidence, chronology, honest Go prompt handoff, connection recall, flashcards, deterministic quiz, versioned attempts.
 - Render deployment configuration with durable disk; private-repository readiness; teaching and demo documentation.
 
 ## Locally verified
 
-- TypeScript validation, formatter check, production extension build, and all 13 focused tests passed.
+- TypeScript validation, formatter check, production extension build, and all 18 focused tests passed.
 - Ownership, capture retry/source attribution, stale/retried save rejection, invalid evidence/graph/quiz rejection, incremental attempts, bounded retrieval, SQLite reopen persistence, deleted-session capture rejection.
 - Official MCP client over local HTTP: authenticated GetSession → fixture analysis through SaveSessionAnalysis → exact API retrieval. This is a harness, **not Go generation**.
 - Packaged extension scripts in isolated Chromium: automatic search/article capture from intercepted synthetic pages, editable/input exclusion, highlight, pause, unrelated-tab exclusion, explicit include, authenticated sync, saved fixture display, evidence details, recall attempt persistence, flashcards, quiz, reload, narrow viewport, interrupted delivery, queued review recovery across a full browser-profile restart with collection paused and old tab bindings cleared, retry, and offline deletion without resurrection. Test-only manifest pregrants website access; production optional-permission prompt was separately approved and verified in the installed Chrome extension.
 - UI screenshots visually inspected. `workspace-test.png` and `sidebar-test.png` are explicitly synthetic test data. They are not integration/demo results.
 - Production dependency audit (`npm audit --omit=dev`) reports zero known vulnerabilities. The official Packs SDK development toolchain currently has six advisory entries (two high, four low), including its Zod 3 dependency; no compatible SDK fix is available. It is not imported by the production server. Compiled production server smoke test passed health and rejected unauthenticated research access (401).
+
+## UI redesign
+
+The supplied RabbitHole redesign is implemented in the existing extension. See [UI redesign verification](ui-redesign.md) for the criterion-by-criterion checks, synthetic screenshots, local-font packaging, and the distinction between isolated UI tests and earlier live Go verification. The new “Partly” rating extends the accepted review enum without changing existing saved attempts.
 
 ## Repository
 
@@ -45,13 +49,13 @@ The authenticated local backend is also running at http://localhost:3210. Creden
 - [ ] **Gate B:** five-minute real Google/article/highlight trail; packaged native Chrome permission/shortcut/context-menu check; real network failure and browser restart recovery.
 - [x] **Gate C core:** real evidence/connection display, recall/flashcard/quiz interaction, incremental Go merge, retained progress.
 - [ ] **Gate D:** real demo rehearsal, Share with Support, public Loom visibility, current organizer rules.
-- [x] Record actual write approval: one Approve for each save. The live flow from unsynced captures uses six discrete actions: Sync, Open in Go, paste, Send, Approve, Sync. Already-synced captures remove the first action. Focusing/returning to the extension adds navigation.
+- [x] Record actual write approval: one Approve for each save. The earlier live flow from unsynced captures used six discrete actions: Sync, Open in Go, paste, Send, Approve, Sync. Already-synced captures remove the first action. Focusing/returning to the extension adds navigation.
 
 ## Limits and deferred features
 
 Overview parser is intentionally narrow and not verified against current live Google DOM variants. A failed extraction uses explicit selection. Automatic collection does not perform semantic filtering; observable tab lineage defines the trail. Browser restart conservatively clears tab associations and pauses active sessions; include the research tab and resume afterward. A restored Chrome tab ID is not treated as proof of continuity.
 
-No unlimited archive, import, OAuth signup, multi-instance database scaling, advanced scheduling guarantees, browser-side LLM, OCR, uploads, spaced repetition, Slack trigger, MCP App, or instant personalized highlight answer. Fixed grid positions support map interaction, not physics. Permanent sync failures can block the queue and require intervention. No competition outcome or learning improvement is promised.
+No unlimited archive, import, OAuth signup, multi-instance database scaling, advanced scheduling guarantees, browser-side LLM, OCR, uploads, spaced repetition, Slack trigger, MCP App, or instant personalized highlight answer. Evidence-depth rows support map interaction without graph physics. Permanent sync failures can block the queue and require intervention. No competition outcome or learning improvement is promised.
 
 ## Implementation gates
 
