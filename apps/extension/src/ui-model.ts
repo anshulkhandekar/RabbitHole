@@ -265,7 +265,7 @@ export function radialVisibleIds(
   all = false,
 ) {
   if (all) return nodes.map((n) => n.id);
-  if (!selected || selected === rootId)
+  if (!selected || selected === rootId || !nodes.some((n) => n.id === selected))
     return nodes.filter((n) => n.row <= 1).map((n) => n.id);
   let branch = selected;
   const seen = new Set<string>();

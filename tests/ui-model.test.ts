@@ -146,6 +146,10 @@ test("overview hides details until their branch is selected and full view restor
   );
   assert.deepEqual(overview, ["root", "a", "b"]);
   assert.deepEqual(
+    model.radialVisibleIds(nodes, "root", "removed-by-new-analysis", false),
+    ["root", "a", "b"],
+  );
+  assert.deepEqual(
     (model as any).radialVisibleIds?.(nodes, "root", "a1", false),
     ["root", "a", "a1"],
   );
