@@ -8,7 +8,7 @@
 
 **Minute 4 — evidence and change.** Inspect an idea and an edge in Explore. Both link to captured sources. Direct support and inferred relationships differ. SaveSessionAnalysis checks expectedVersion and evidence IDs. If more research arrives while Go is thinking, it stays pending. A later run merges into the existing graph. Invalid or stale writes cannot partly update it.
 
-**Minute 5 — learning and honesty.** Try Explain the connection before revealing the explanation. Rate your answer. Show a flashcard or quiz. The UI can check a multiple-choice index; it cannot honestly judge arbitrary prose as AI. A fresh critique uses Go. Close/reopen the workspace to show saved progress, then state which live integrations were actually tested.
+**Minute 5 — learning and honesty.** Try a four-choice quiz in the 2×2 grid, inspect the explanation, then show matching against saved pairs. Self-assessment and flashcards remain optional. The UI checks saved answer keys; it does not judge arbitrary prose as AI. A fresh critique uses Go. Close/reopen the workspace to show saved progress, then state which live integrations were actually tested.
 
 ## Questions judges may ask
 
@@ -16,7 +16,7 @@
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Why not paste everything into chat?     | Enabled browsing captures a bounded trail automatically, and results persist as a source-linked map plus activities.                                                                                                            |
 | What does Go do?                        | Extracts/merges concepts, reasons about relationships, applies preferences, generates study material, and provides deeper feedback through its connected tools.                                                                 |
-| Is the Process button automatic?        | No. It opens Go and attempts to copy an exact prompt. The user sends it and may approve the save.                                                                                                                               |
+| Is Send to Go automatic?                | No. It opens Go and attempts to copy an exact prompt. The user sends it and may approve the save.                                                                                                                               |
 | Why an extension?                       | It can observe the user's explicitly enabled research tabs and selection without repeated uploads.                                                                                                                              |
 | Can another person guess my session ID? | IDs alone do not authorize access. Every API/tool uses the authenticated owner's token.                                                                                                                                         |
 | What happens offline?                   | Captures and mutations queue locally and retry. The UI distinguishes pending sync and pending analysis. Device storage still has limits.                                                                                        |

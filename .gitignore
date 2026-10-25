@@ -15,3 +15,7 @@ docs/render-deploy-review.png
 docs/render-*.png
 docs/extension-permission-review.png
 docs/live-*.png
+
+# Generated QA/account screenshots are disposable; product assets live in apps/.
+docs/*.png
+.DS_Store

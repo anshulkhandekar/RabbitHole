@@ -27,14 +27,10 @@ The redesign follows `/Users/anshulkhandekar/ai-toolkit/smoke-test/rabbithole-de
 
 ## Verification scope
 
-`npm run check` runs TypeScript, 18 focused tests and the production build. `npm run lint` checks formatting. The packaged browser harness uses intercepted synthetic research pages, a temporary authenticated backend, synthetic saved analysis and a synthetic Go destination. It does not generate through Go or mutate the real research session.
+At the redesign checkpoint, `npm run check` ran TypeScript, 18 focused tests and the production build. The Stage 1 suite now has 32 tests; see [current status](status.md). `npm run lint` checks formatting. The packaged browser harness uses intercepted synthetic research pages, a temporary authenticated backend, synthetic saved analysis and a synthetic Go destination. It does not generate through Go or mutate the real research session.
 
 The browser checks cover 320px light/dark without horizontal overflow, footer action count, handoff and observed save, offline/paused states, theme persistence, local fonts, reduced motion, keyboard selection/menu/card, responsive inspector, inferred tunnels, partial ratings, deterministic quiz, recall persistence and the held-save practice-mode race. Existing capture, input exclusion, include/exclude, queued review across profile restart, retry and offline deletion regressions remain included. Native website permission dialogs are pregranted in the test-only manifest; the production manifest is unchanged in that respect.
 
-The screenshots below contain explicitly labelled **synthetic UI test data**. They document layout, not Go generation or competition results.
-
-- [320px light panel](redesign-sidebar-light.png)
-- [320px dark panel](redesign-sidebar-dark.png)
-- [Workspace](redesign-workspace.png)
+Generated screenshots contain explicitly labelled synthetic UI data and can be recreated in ignored `test-results/` with `npm run test:browser`. Copied baseline screenshots were removed at Stage 1 closeout. They were layout checks, not evidence of Go generation or competition results.
 
 The prior real Go read/generate/confirmed-save/display tests are recorded separately in [status](status.md). They were not repeated as part of this visual redesign. To activate a rebuilt unpacked extension, click Reload on its card in `chrome://extensions`, then reopen the side panel; connection and session storage are retained.

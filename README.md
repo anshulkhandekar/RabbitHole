@@ -4,7 +4,7 @@
 
 RabbitHole captures an explicitly enabled browsing session, then lets a Superhuman Go agent turn its actual sources into a concept map and recall activities. The Chrome extension handles collection and study mechanics. Go owns the generative reasoning. An authenticated backend stores and validates the results; no separate LLM API key is required.
 
-Core code, local tests, packaged-extension browser checks, and the existing Go agent are implemented. **Hosted Go read/generate/write/display and incremental merging were verified with genuine captures on October 24, 2026.** The installed extension connects to a durable Render backend. See [current status](docs/status.md) before making integration or submission claims.
+**Stage 1 checkpoint — October 24, 2026.** Capture, quiet reading, guided maps, quiz/matching, durable hosting and the Go integration are implemented. Genuine generation, incremental merging and a rich explicit rebuild have been verified. Further user fixes, content-quality work and final competition rehearsal remain. Start with the [checkpoint](docs/stage-1.md), [next-chat handoff](docs/handoff.md), [current status](docs/status.md), and [maintenance guide](docs/maintenance.md).
 
 ## Quick start
 
@@ -36,11 +36,12 @@ npm run check         # typecheck, focused backend/MCP tests, production build
 npm run lint          # formatter check
 npx playwright install chromium
 npm run test:browser  # isolated extension harness, synthetic pages and saved analysis
+npm run test:reload   # actual runtime-invalidation cleanup in a disposable profile
 ```
 
-For an existing Chromium install, set `CHROMIUM_PATH` to its executable. Browser tests copy the built extension into a temporary profile and pregrant hosts in a test-only manifest, since native permission dialogs cannot be reliably automated headlessly. They never modify the production manifest and never present fixtures as Go output. Production builds contain no fixture analysis or seeded study results.
+For an existing Chromium install, set `CHROMIUM_PATH` to its executable; see [maintenance](docs/maintenance.md) for the verified local path. Generated screenshots go in ignored `test-results/` and are not retained as repository documentation. Browser tests copy the built extension into a temporary profile and pregrant hosts in a test-only manifest, since native permission dialogs cannot be reliably automated headlessly. They never modify the production manifest and never present fixtures as Go output. Production builds contain no fixture analysis or seeded study results.
 
-The [reading-first iteration](docs/reading-first.md) records the current behavior, rich-analysis contract and verification limits. The earlier [UI redesign verification](docs/ui-redesign.md) records the supplied design, local fonts, responsive states and evidence-depth layout. After rebuilding an installed unpacked extension, click **Reload** in `chrome://extensions` to activate its new UI, worker and icons. Your saved connection and sessions remain in Chrome storage.
+The [reading-first iteration](docs/reading-first.md) records the current behavior, rich-analysis contract and verification limits. The earlier [UI redesign verification](docs/ui-redesign.md) records the supplied design, local fonts, responsive states and evidence-depth layout. After rebuilding an installed unpacked extension, click **Reload** in `chrome://extensions` to activate its new UI, worker and icons. Refresh existing Go/research tabs once after reloading to replace old content scripts. Your saved connection and sessions remain in Chrome storage.
 
 ## Components
 

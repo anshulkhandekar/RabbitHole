@@ -1,4 +1,6 @@
-# Implementation plan
+# Stage 1 implementation plan
+
+Stage 1 is closed as a development checkpoint. See [checkpoint](stage-1.md) and [next-chat handoff](handoff.md); upcoming user feedback sets Stage 2 priorities.
 
 - [x] Inspect empty workspace, ancestors, Git/remote state and platform docs.
 - [x] Shared runtime contracts, durable owner-scoped storage, validated transactional saves.
@@ -11,7 +13,9 @@
 - [x] Deploy hosted backend and install/authenticate the Go connector.
 - [x] Live Gate A: genuine research and actual Go read/generate/write/display.
 - [x] Live Gate C: incremental merge, exact displayed result and retained progress.
+- [x] Reading-first UI, objective quiz/matching, explicit rebuild contract, connector v4 discovery repair and real rich rebuild verification.
+- [x] Stage 1 documentation, artifact cleanup and private milestone checkpoint.
 - [ ] Final real recovery/timed-demo rehearsal.
 - [ ] Rehearse the demo, verify sharing/submission requirements, and record Loom.
 
-Hosting and connector provisioning are complete. Remaining verification concerns real recovery rehearsal and the final presentation steps. Support sharing is enabled; ordinary publishing is blocked by the organization. Continue the live validation before spending effort on stretch features. Current status and limitations are in status.md.
+Hosting and connector provisioning are complete. Remaining verification concerns real recovery rehearsal and the final presentation steps. Support sharing is enabled; ordinary publishing is blocked by the organization. Stage 2 fixes and feature priorities belong to the next chat; final submission checks remain separate. Current status and limitations are in status.md.
