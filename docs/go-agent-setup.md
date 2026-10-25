@@ -1,6 +1,6 @@
 # Connect RabbitHole to Go
 
-The application implements one integration transport: MCP Streamable HTTP. Go configuration is manual and is not deployed by committing this repository. School agent-builder access and saving the existing RabbitHole agent instructions were verified in the signed-in browser. The private connector (Pack 74898, released v2) is authenticated and attached. A genuine GetSession → Go generation → approved SaveSessionAnalysis → extension display round trip was verified on October 24, 2026. An exact snapshot of the saved instructions is in `integrations/superhuman/live-agent-instructions.txt`.
+The application implements one integration transport: MCP Streamable HTTP. Go configuration is manual and is not deployed by committing this repository. School agent-builder access and saving the existing RabbitHole agent instructions were verified in the signed-in browser. The private connector (Pack 74898, released v4) is authenticated and attached. A genuine GetSession → Go generation → approved SaveSessionAnalysis → extension display round trip was verified on October 24, 2026. An exact snapshot of the saved instructions is in `integrations/superhuman/live-agent-instructions.txt`.
 
 ## 1. Reachable, authenticated server
 
@@ -15,7 +15,7 @@ Following the [official MCP guide](https://coda.io/packs/build/latest/guides/blo
 1. Open the Packs page in your Superhuman Docs workspace.
 2. Select **Create an MCP Connector** and enter your hosted `/mcp` URL.
 3. Static bearer authentication was not discovered automatically in the live wizard. Use the validated [pack.ts](../integrations/superhuman/pack.ts) source, which declares per-user `HeaderBearerToken` and the backend network domain. Build and release the connector, then enter the personal token in its account connection dialog, never a URL parameter.
-4. Create the connector, release it, and add the connection to your Go agent. Installation/sharing rights depend on your workspace. Later connector code changes need their own build and release. The server's runtime tool list is retrieved through MCP.
+4. Create the connector, release it, and add the connection to your Go agent. Installation/sharing rights depend on your workspace. Later connector code changes need their own build and release. The server's runtime tool list is retrieved through MCP. Go was observed retaining the older parameter schema after a backend update, even in a fresh chat and after a connector-only rebuild. The v4 connector uses `/mcp?schema=2` to obtain fresh discovery from the same authenticated endpoint. Bump the schema revision when making tool-contract changes, build/release, and verify the actual fields in a fresh Go chat.
 5. Confirm tools: `ListSessions`, `GetSession`, `SaveSessionAnalysis`. The first two advertise `readOnlyHint: true`; the write advertises `false` and should require confirmation. Do not change that annotation to bypass approval.
 
 The released connector was also validated locally with `npx coda validate integrations/superhuman/pack.ts`. The official `@codahq/packs-sdk` is a development dependency; the production server uses the official MCP SDK. For this private connector, the documented setup route is `https://docs.superhuman.com/go/agent/setup/74898`. After connecting, search RabbitHole in the agent builder’s Add connections dialog. Read approval is Always allow; Write approval remains Always ask.
@@ -45,3 +45,9 @@ The official builder lists Scheduled, While writing, Email received/sent, and Sl
 MCP Apps are documented only in Go's web client. They are unnecessary here. This project has no direct Go invocation API, inbound webhook, internal endpoint, or browser-click automation workaround.
 
 Live scheduling inspection: Custom exposes interval 1–30 with Hour/Day/Week/Month units. No minute unit was present. No schedule was saved; write confirmation and completion remain untested for scheduled runs. Manual chat is the verified workflow.
+
+## Rebuild schema troubleshooting
+
+If Go reports that `intent` is unavailable or a rebuild fails with “No new captures,” do not invent captures or remove the backend guard. Check that the installed connector uses the current release and open a fresh RabbitHole chat. A read-only schema diagnostic should expose top-level `intent` and `overview`, concept `parentId`/`evidence`, and matching `pairs`. Merely updating agent instructions or releasing identical connector code did not refresh the old schema in the observed run. The schema revision is not a credential; bearer authentication and Always ask for writes remain required.
+
+Quote validation reports every invalid evidence path with item and capture IDs, without echoing source text. Fix only those excerpts after re-reading their captures, retain the rest of the complete guide, and retry against the current saved version. Validation failures remain atomic; they do not partially replace an existing guide.

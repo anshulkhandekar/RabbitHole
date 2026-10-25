@@ -124,3 +124,44 @@ test("quiz reviews with a selected choice cannot persist a contradictory grade",
   );
   db.db.close();
 });
+
+// A generic quote error forces the agent to guess or discard valid content.
+test("quote validation identifies every invalid evidence path and preserves the saved guide for a targeted retry", () => {
+  const db = setup();
+  try {
+    db.save("alice", analysis());
+    const before = db.get("alice", "s1");
+    const rich: any = {
+      ...analysis(),
+      expectedVersion: 1,
+      intent: "rebuild",
+      processedCaptureIds: [],
+    };
+    rich.concepts[0].evidence = [
+      { captureId: "c1", quote: "Invented concept quote" },
+    ];
+    rich.edges[0].evidence = [
+      { captureId: "c1", quote: "Invented edge quote" },
+    ];
+    assert.throws(
+      () => db.save("alice", rich),
+      (error: any) => {
+        assert.match(error.message, /concepts\[0\]\.evidence\[0\].*n1.*c1/);
+        assert.match(error.message, /edges\[0\]\.evidence\[0\].*e1.*c1/);
+        assert.doesNotMatch(
+          error.message,
+          /Invented concept quote|Invented edge quote/,
+        );
+        return true;
+      },
+    );
+    assert.deepEqual(db.get("alice", "s1"), before);
+    rich.concepts[0].evidence[0].quote = "A GPU uses parallel execution";
+    rich.edges[0].evidence[0].quote = "many operations at once.";
+    assert.equal(db.save("alice", rich).version, 2);
+    assert.equal(db.get("alice", "s1").analysis!.edges.length, 1);
+    assert.equal(db.get("alice", "s1").analysis!.studyItems.length, 3);
+  } finally {
+    db.db.close();
+  }
+});

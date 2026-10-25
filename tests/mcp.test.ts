@@ -26,7 +26,7 @@ test("authenticated API and official MCP client complete read → validated writ
       404,
     );
     await client.connect(
-      new StreamableHTTPClientTransport(new URL(url + "/mcp"), {
+      new StreamableHTTPClientTransport(new URL(url + "/mcp?schema=2"), {
         requestInit: { headers: { Authorization: "Bearer " + token } },
       }),
     );
@@ -36,6 +36,15 @@ test("authenticated API and official MCP client complete read → validated writ
       ["ListSessions", "GetSession", "SaveSessionAnalysis"],
     );
     assert.equal(tools.tools[2].annotations?.readOnlyHint, false);
+    // Rebuild support must be discoverable, not only accepted by direct calls.
+    const input = tools.tools[2].inputSchema.properties as any;
+    assert.deepEqual(input.intent.enum, ["incremental", "rebuild"]);
+    assert.ok(input.overview.properties.rootConceptId);
+    assert.ok(input.concepts.items.properties.parentId);
+    assert.ok(input.concepts.items.properties.evidence);
+    assert.ok(input.studyItems.items.properties.type.enum.includes("matching"));
+    assert.ok(input.studyItems.items.properties.pairs);
+    assert.ok(input.studyItems.items.properties.choiceExplanations);
     const read = await client.callTool({
       name: "GetSession",
       arguments: { sessionId: "s1" },

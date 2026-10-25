@@ -14,7 +14,7 @@ This iteration follows hands-on feedback: capture worked, but watching the trail
 
 ## Verification
 
-`npm run check`: 31 focused tests, TypeScript and production build. The official MCP transport test now also exercises an explicit rebuild with existing evidence and retrieves its saved overview and hierarchy.
+`npm run check`: 32 focused tests, TypeScript and production build. The official MCP transport test now also exercises an explicit rebuild with existing evidence and retrieves its saved overview and hierarchy.
 
 The packaged Chromium harness uses a temporary profile, synthetic research pages, synthetic analysis and a synthetic handoff destination. It tests opt-in/off automatic selection, genuine pointer selection, programmatic and editable exclusion, compact indicator pause/resume/hide, changed-storage disclosure retention, radial overview/branch/full-map/trail navigation, static map with motion enabled, keyboard controls, quiz default and immediate result persistence, matching grading/persistence, 320px light/dark, local fonts, reduced motion, offline/paused/handoff states and existing capture/restart/retry/delete regressions. Native side-panel close/reopen gestures and native permission prompts are not established by a headless extension-page test. Native close uses the documented Chrome API with a manual-close fallback; reopening uses a synchronous user-gesture message handler.
 

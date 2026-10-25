@@ -190,19 +190,37 @@ export class Store {
         }
       }
       const normalized = (text: string) => text.replace(/\s+/g, " ").trim();
-      for (const item of [...p.concepts, ...p.edges, ...p.studyItems])
-        for (const excerpt of item.evidence ?? []) {
-          const capture = s.captures.find((c) => c.id === excerpt.captureId);
-          if (
-            !capture ||
-            !item.captureIds.includes(excerpt.captureId) ||
-            !normalized(capture.text).includes(normalized(excerpt.quote))
-          )
-            throw new DomainError(
-              422,
-              "Evidence excerpt must be an exact source quotation",
-            );
+      const invalidEvidence: string[] = [];
+      for (const [group, items] of Object.entries({
+        concepts: p.concepts,
+        edges: p.edges,
+        studyItems: p.studyItems,
+      })) {
+        for (const [itemIndex, item] of items.entries()) {
+          for (const [evidenceIndex, excerpt] of (
+            item.evidence ?? []
+          ).entries()) {
+            const capture = s.captures.find((c) => c.id === excerpt.captureId);
+            if (
+              !capture ||
+              !item.captureIds.includes(excerpt.captureId) ||
+              !normalized(capture.text).includes(normalized(excerpt.quote))
+            ) {
+              invalidEvidence.push(
+                `${group}[${itemIndex}].evidence[${evidenceIndex}] (item ${item.id}, capture ${excerpt.captureId})`,
+              );
+            }
+          }
         }
+      }
+      if (invalidEvidence.length) {
+        throw new DomainError(
+          422,
+          "Evidence excerpts must be exact source quotations. Invalid: " +
+            invalidEvidence.join("; ") +
+            ". Re-read the listed captureIds and copy exact contiguous text. Correct these excerpts without discarding other guide content.",
+        );
+      }
 
       for (const item of [...p.concepts, ...p.edges, ...p.studyItems])
         if (
