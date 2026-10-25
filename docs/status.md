@@ -11,7 +11,7 @@
 
 ## Locally verified
 
-- TypeScript validation, formatter check, production extension build, and all 28 focused tests passed.
+- TypeScript validation, formatter check, production extension build, and all 31 focused tests passed.
 - Ownership, capture retry/source attribution, stale/retried save rejection, invalid evidence/graph/quiz rejection, incremental attempts, bounded retrieval, SQLite reopen persistence, deleted-session capture rejection.
 - Official MCP client over local HTTP: authenticated GetSession → fixture analysis through SaveSessionAnalysis → exact API retrieval. This is a harness, **not Go generation**.
 - Packaged extension scripts in isolated Chromium: automatic search/article capture from intercepted synthetic pages, editable/input exclusion, highlight, pause, unrelated-tab exclusion, explicit include, authenticated sync, saved fixture display, evidence details, recall attempt persistence, flashcards, quiz, reload, narrow viewport, interrupted delivery, queued review recovery across a full browser-profile restart with collection paused and old tab bindings cleared, retry, and offline deletion without resurrection. Test-only manifest pregrants website access; production optional-permission prompt was separately approved and verified in the installed Chrome extension.

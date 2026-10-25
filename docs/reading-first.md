@@ -14,9 +14,11 @@ This iteration follows hands-on feedback: capture worked, but watching the trail
 
 ## Verification
 
-`npm run check`: 28 focused tests, TypeScript and production build. The official MCP transport test now also exercises an explicit rebuild with existing evidence and retrieves its saved overview and hierarchy.
+`npm run check`: 31 focused tests, TypeScript and production build. The official MCP transport test now also exercises an explicit rebuild with existing evidence and retrieves its saved overview and hierarchy.
 
 The packaged Chromium harness uses a temporary profile, synthetic research pages, synthetic analysis and a synthetic handoff destination. It tests opt-in/off automatic selection, genuine pointer selection, programmatic and editable exclusion, compact indicator pause/resume/hide, changed-storage disclosure retention, radial overview/branch/full-map/trail navigation, static map with motion enabled, keyboard controls, quiz default and immediate result persistence, matching grading/persistence, 320px light/dark, local fonts, reduced motion, offline/paused/handoff states and existing capture/restart/retry/delete regressions. Native side-panel close/reopen gestures and native permission prompts are not established by a headless extension-page test. Native close uses the documented Chrome API with a manual-close fallback; reopening uses a synchronous user-gesture message handler.
+
+`npm run test:reload` uses a separate temporary Chromium profile and calls `chrome.runtime.reload()` with a research page left open. It checks that the orphaned script removes its collecting indicator and reports no uncaught page errors across subsequent polling cycles. Unit regressions cover synchronous throws, rejected messaging promises and a missing runtime ID, including timer and listener cleanup. This headless command-line extension test establishes invalidation cleanup, not Chrome’s native Reload-button and page-refresh recovery flow. After updating the unpacked extension, refresh existing research and Go tabs once so they receive the new script.
 
 Screenshots are explicitly synthetic UI evidence, not proof of actual Go generation:
 

@@ -6,12 +6,49 @@ declare const __RABBIT_TOKENS__: string;
 (() => {
   const key = "__rabbitHoleInstalled";
   if ((globalThis as any)[key]) {
-    void chrome.runtime
-      .sendMessage({ type: "reading-context" })
-      .then(() => window.dispatchEvent(new Event("rabbithole-refresh")));
+    (globalThis as any)[key]();
     return;
   }
-  (globalThis as any)[key] = true;
+  (globalThis as any)[key] = () => schedule();
+  let stopped = false;
+  const events = new AbortController();
+  function stop() {
+    if (stopped) return;
+    stopped = true;
+    context = null;
+    clearTimeout(timer);
+    clearTimeout(selectionTimer);
+    clearTimeout(noteTimer);
+    clearInterval(poll);
+    observer.disconnect();
+    events.abort();
+    indicator?.remove();
+    indicator = undefined;
+    try {
+      chrome.runtime.onMessage.removeListener(onMessage);
+    } catch {
+      // Chrome may have already removed the invalidated runtime.
+    }
+  }
+  async function message(payload: object): Promise<any> {
+    if (stopped) return null;
+    try {
+      if (!chrome.runtime.id) {
+        stop();
+        return null;
+      }
+      const result = await chrome.runtime.sendMessage(payload);
+      return stopped ? null : result;
+    } catch (error) {
+      if (
+        !chrome.runtime?.id ||
+        /extension context invalidated/i.test(String(error))
+      )
+        stop();
+      // Transient messaging failures can be retried on the next scan.
+      return null;
+    }
+  }
   let context: any = null,
     lastUrl = "",
     lastArticle = "",
@@ -30,23 +67,21 @@ declare const __RABBIT_TOKENS__: string;
       !text.trim()
     )
       return;
-    return await chrome.runtime
-      .sendMessage({
-        type: "capture",
-        automatic,
-        capture: {
-          id: crypto.randomUUID(),
-          sessionId: context.id,
-          sourceType: type,
-          url: location.href,
-          title: document.title.slice(0, 300),
-          text: text.trim().slice(0, 12000),
-          timestamp: new Date().toISOString(),
-          tag,
-          references,
-        },
-      })
-      .catch(() => {});
+    return await message({
+      type: "capture",
+      automatic,
+      capture: {
+        id: crypto.randomUUID(),
+        sessionId: context.id,
+        sourceType: type,
+        url: location.href,
+        title: document.title.slice(0, 300),
+        text: text.trim().slice(0, 12000),
+        timestamp: new Date().toISOString(),
+        tag,
+        references,
+      },
+    });
   };
   function safeClone() {
     const clone = document.cloneNode(true) as Document;
@@ -58,9 +93,9 @@ declare const __RABBIT_TOKENS__: string;
     return clone;
   }
   async function scan() {
-    context = await chrome.runtime
-      .sendMessage({ type: "reading-context" })
-      .catch(() => null);
+    if (stopped) return;
+    context = await message({ type: "reading-context" });
+    if (stopped) return;
     updateIndicator();
     if (
       !context ||
@@ -91,6 +126,7 @@ declare const __RABBIT_TOKENS__: string;
     }
   }
   const schedule = () => {
+    if (stopped) return;
     clearTimeout(timer);
     timer = setTimeout(() => void scan(), 1100);
   };
@@ -102,21 +138,28 @@ declare const __RABBIT_TOKENS__: string;
     subtree: true,
     childList: true,
   });
-  document.addEventListener("visibilitychange", schedule);
-  window.addEventListener("popstate", schedule);
-  window.addEventListener("rabbithole-refresh", schedule);
+  document.addEventListener("visibilitychange", schedule, {
+    signal: events.signal,
+  });
+  window.addEventListener("popstate", schedule, { signal: events.signal });
+  window.addEventListener("rabbithole-refresh", schedule, {
+    signal: events.signal,
+  });
   // A low-frequency URL check handles History API navigation and session pause/resume.
-  setInterval(() => {
+  const poll = setInterval(() => {
     if (document.visibilityState === "visible") schedule();
   }, 6000);
-  chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
+  const onMessage: Parameters<
+    typeof chrome.runtime.onMessage.addListener
+  >[0] = (msg, _sender, reply) => {
+    if (stopped) return;
     if (msg.type === "reading-update") {
       schedule();
       return;
     }
     if (msg.type !== "highlight") return;
     void (async () => {
-      context = await chrome.runtime.sendMessage({ type: "reading-context" });
+      context = await message({ type: "reading-context" });
       const selected = readSelection(document, 1);
       if (!selected) return { ignored: true };
       if (!context || context.status !== "active")
@@ -129,17 +172,26 @@ declare const __RABBIT_TOKENS__: string;
       );
       return result ?? { ignored: true };
     })()
-      .then(reply)
-      .catch(() => reply({ error: "Selection unavailable" }));
+      .then((result) => {
+        if (!stopped) reply(result);
+      })
+      .catch(() => {
+        // A response channel can close when the extension reloads.
+      });
     return true;
-  });
+  };
+  chrome.runtime.onMessage.addListener(onMessage);
   let indicator: HTMLElement | undefined,
     noteTimer: ReturnType<typeof setTimeout> | undefined,
     selectionTimer: ReturnType<typeof setTimeout> | undefined,
     dragging = false;
   let intendedSelection: string | undefined;
   function updateIndicator() {
-    if (!context?.readingMode || context.excluded.includes(location.href)) {
+    if (
+      stopped ||
+      !context?.readingMode ||
+      context.excluded.includes(location.href)
+    ) {
       indicator?.remove();
       indicator = undefined;
       return;
@@ -165,22 +217,25 @@ declare const __RABBIT_TOKENS__: string;
       open.title = "Open RabbitHole";
       open.setAttribute("aria-label", "Open RabbitHole");
       const image = document.createElement("img");
-      image.src = chrome.runtime.getURL("rabbithole-mark.svg");
+      try {
+        image.src = chrome.runtime.getURL("rabbithole-mark.svg");
+      } catch {
+        stop();
+        return;
+      }
       image.alt = "";
       open.append(image);
       const status = document.createElement("span");
       status.className = "status";
       open.append(status);
       open.onclick = () =>
-        void chrome.runtime
-          .sendMessage({ type: "reading-open" })
-          .then((result) => {
-            if (result.error) showReadingNote(result.error);
-          });
+        void message({ type: "reading-open" }).then((result) => {
+          if (result?.error) showReadingNote(result.error);
+        });
       const pause = document.createElement("button");
       pause.className = "pause";
       pause.onclick = async () => {
-        await chrome.runtime.sendMessage({
+        await message({
           type: "reading-control",
           control: context?.status === "active" ? "pause" : "resume",
         });
@@ -191,7 +246,7 @@ declare const __RABBIT_TOKENS__: string;
       hide.textContent = "Hide";
       hide.title = "Hide indicator; collection keeps its current state";
       hide.onclick = async () => {
-        await chrome.runtime.sendMessage({
+        await message({
           type: "reading-control",
           control: "hide",
         });
@@ -228,13 +283,11 @@ declare const __RABBIT_TOKENS__: string;
   }
   function scheduleSelection() {
     clearTimeout(selectionTimer);
-    if (dragging) return;
+    if (stopped || dragging) return;
     const selected = readSelection(document);
     if (!selected || selected !== intendedSelection) return;
     selectionTimer = setTimeout(async () => {
-      context = await chrome.runtime
-        .sendMessage({ type: "reading-context" })
-        .catch(() => null);
+      context = await message({ type: "reading-context" });
       if (
         !context?.settings.autoHighlights ||
         context.status !== "active" ||
@@ -246,7 +299,9 @@ declare const __RABBIT_TOKENS__: string;
       if (result?.saved) showReadingNote("Highlight saved");
     }, 750);
   }
-  document.addEventListener("selectionchange", scheduleSelection);
+  document.addEventListener("selectionchange", scheduleSelection, {
+    signal: events.signal,
+  });
   document.addEventListener(
     "pointerdown",
     (event) => {
@@ -255,7 +310,7 @@ declare const __RABBIT_TOKENS__: string;
       dragging = true;
       clearTimeout(selectionTimer);
     },
-    { passive: true },
+    { passive: true, signal: events.signal },
   );
   document.addEventListener(
     "pointerup",
@@ -269,7 +324,7 @@ declare const __RABBIT_TOKENS__: string;
         : readSelection(document);
       scheduleSelection();
     },
-    { passive: true },
+    { passive: true, signal: events.signal },
   );
   document.addEventListener(
     "pointercancel",
@@ -277,25 +332,29 @@ declare const __RABBIT_TOKENS__: string;
       dragging = false;
       clearTimeout(selectionTimer);
     },
-    { passive: true },
+    { passive: true, signal: events.signal },
   );
-  document.addEventListener("keyup", (event) => {
-    if (
-      event.isTrusted &&
-      ([
-        "Shift",
-        "ArrowLeft",
-        "ArrowRight",
-        "ArrowUp",
-        "ArrowDown",
-        "Home",
-        "End",
-      ].includes(event.key) ||
-        ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a"))
-    ) {
-      intendedSelection = readSelection(document);
-      scheduleSelection();
-    }
-  });
+  document.addEventListener(
+    "keyup",
+    (event) => {
+      if (
+        event.isTrusted &&
+        ([
+          "Shift",
+          "ArrowLeft",
+          "ArrowRight",
+          "ArrowUp",
+          "ArrowDown",
+          "Home",
+          "End",
+        ].includes(event.key) ||
+          ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a"))
+      ) {
+        intendedSelection = readSelection(document);
+        scheduleSelection();
+      }
+    },
+    { signal: events.signal },
+  );
   schedule();
 })();

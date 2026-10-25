@@ -15,6 +15,7 @@
     "check": "npm run typecheck && npm test && npm run build",
     "start": "node --env-file-if-exists=.env dist/server/index.mjs",
     "test:browser": "tsx tests/browser.ts",
+    "test:reload": "tsx tests/content-reload.ts",
     "setup:local": "node scripts/setup-local.mjs",
     "format": "prettier --write apps packages tests scripts integrations docs/*.md README.md package.json tsconfig.json render.yaml",
     "lint": "prettier --check apps packages tests scripts integrations docs/*.md README.md package.json tsconfig.json render.yaml"
