@@ -59,6 +59,43 @@ test("authenticated API and official MCP client complete read → validated writ
       arguments: analysis(),
     });
     assert.equal(stale.isError, true);
+    const rich = {
+      ...analysis(),
+      expectedVersion: 1,
+      intent: "rebuild",
+      processedCaptureIds: [],
+      overview: {
+        rootConceptId: "n1",
+        summary: "A synthetic learning guide.",
+        takeaways: ["Independent operations can proceed together."],
+        route: ["n1", "n2"],
+      },
+      concepts: analysis().concepts.map((c, i) => ({
+        ...c,
+        ...(i === 1 ? { parentId: "n1" } : {}),
+        evidence: [
+          {
+            captureId: "c1",
+            quote:
+              "A GPU uses parallel execution to process many operations at once.",
+          },
+        ],
+      })),
+    };
+    const rebuilt = await client.callTool({
+      name: "SaveSessionAnalysis",
+      arguments: rich,
+    });
+    assert.equal(rebuilt.isError, undefined);
+    const guide = await client.callTool({
+        name: "GetSession",
+        arguments: { sessionId: "s1" },
+      }),
+      actual = JSON.parse((guide.content as any)[0].text);
+    assert.equal(actual.version, 2);
+    assert.deepEqual(actual.analysis.overview, rich.overview);
+    assert.equal(actual.analysis.concepts[1].parentId, "n1");
+    assert.equal(actual.pending, 0);
   } finally {
     await client.close();
     await new Promise<void>((r, e) =>

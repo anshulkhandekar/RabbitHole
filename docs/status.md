@@ -11,12 +11,16 @@
 
 ## Locally verified
 
-- TypeScript validation, formatter check, production extension build, and all 18 focused tests passed.
+- TypeScript validation, formatter check, production extension build, and all 28 focused tests passed.
 - Ownership, capture retry/source attribution, stale/retried save rejection, invalid evidence/graph/quiz rejection, incremental attempts, bounded retrieval, SQLite reopen persistence, deleted-session capture rejection.
 - Official MCP client over local HTTP: authenticated GetSession → fixture analysis through SaveSessionAnalysis → exact API retrieval. This is a harness, **not Go generation**.
 - Packaged extension scripts in isolated Chromium: automatic search/article capture from intercepted synthetic pages, editable/input exclusion, highlight, pause, unrelated-tab exclusion, explicit include, authenticated sync, saved fixture display, evidence details, recall attempt persistence, flashcards, quiz, reload, narrow viewport, interrupted delivery, queued review recovery across a full browser-profile restart with collection paused and old tab bindings cleared, retry, and offline deletion without resurrection. Test-only manifest pregrants website access; production optional-permission prompt was separately approved and verified in the installed Chrome extension.
 - UI screenshots visually inspected. `workspace-test.png` and `sidebar-test.png` are explicitly synthetic test data. They are not integration/demo results.
 - Production dependency audit (`npm audit --omit=dev`) reports zero known vulnerabilities. The official Packs SDK development toolchain currently has six advisory entries (two high, four low), including its Zod 3 dependency; no compatible SDK fix is available. It is not imported by the production server. Compiled production server smoke test passed health and rejected unauthenticated research access (401).
+
+## Reading first iteration
+
+The user’s reading-first feedback is implemented: compact in-page capture indicator, opt-in gesture-based automatic highlights, stable source disclosures, static progressive radial map, richer optional Go output, explicit rebuilds, default quiz grid with immediate persisted answers, and matching. See [verification and limits](reading-first.md). New generation quality still needs a fresh real-source rebuild; synthetic tests do not prove that quality.
 
 ## UI redesign
 

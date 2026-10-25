@@ -74,3 +74,83 @@ test("opposite tunnels between the same chambers get separate routes and labels"
   assert.notEqual(first.labelY, second.labelY);
   assert.notEqual(first.path, second.path);
 });
+
+// The hub must be the saved root, not whichever label happens to sort first.
+import * as model from "../apps/extension/src/ui-model";
+test("radial map honors the saved root and gives it a larger chamber than its details", () => {
+  const a: any = analysis();
+  a.overview = {
+    rootConceptId: "n2",
+    summary: "Main idea",
+    takeaways: ["A major point"],
+    route: ["n2", "n1"],
+  };
+  a.concepts[0].parentId = "n2";
+  const layout = (model as any).radialLayout?.(a, []);
+  assert.equal(layout?.rootId, "n2");
+  assert.ok(
+    layout.nodes.find((n: any) => n.id === "n2").width >
+      layout.nodes.find((n: any) => n.id === "n1").width,
+  );
+  const root = layout.nodes.find((n: any) => n.id === "n2");
+  assert.equal(root.x + root.width / 2, 0);
+  assert.equal(root.y + root.height / 2, 0);
+});
+test("legacy radial grouping uses existing edges and labels its root as a layout choice", () => {
+  const layout = (model as any).radialLayout?.(analysis(), []);
+  assert.equal(layout?.authored, false);
+  assert.equal(layout?.nodes.length, 2);
+  assert.equal(layout?.nodes.find((n: any) => n.id === "n2").parentId, "n1");
+});
+
+test("reverse radial relationships keep their labels on separate sides of the tunnel", () => {
+  const a = {
+      id: "a",
+      x: 0,
+      y: 0,
+      width: 280,
+      height: 158,
+      row: 0,
+      depth: 1,
+      isRoot: true,
+    },
+    b = {
+      id: "b",
+      x: 400,
+      y: 0,
+      width: 224,
+      height: 80,
+      row: 1,
+      depth: 2,
+      isRoot: false,
+    };
+  const first = model.radialTunnelPath(a, b, -15),
+    second = model.radialTunnelPath(b, a, 15);
+  assert.notEqual(first.labelY, second.labelY);
+  assert.notEqual(first.path, second.path);
+});
+
+test("overview hides details until their branch is selected and full view restores cross-branch ideas", () => {
+  const nodes = [
+    { id: "root", row: 0 },
+    { id: "a", row: 1, parentId: "root" },
+    { id: "b", row: 1, parentId: "root" },
+    { id: "a1", row: 2, parentId: "a" },
+    { id: "b1", row: 2, parentId: "b" },
+  ];
+  const overview = (model as any).radialVisibleIds?.(
+    nodes,
+    "root",
+    null,
+    false,
+  );
+  assert.deepEqual(overview, ["root", "a", "b"]);
+  assert.deepEqual(
+    (model as any).radialVisibleIds?.(nodes, "root", "a1", false),
+    ["root", "a", "a1"],
+  );
+  assert.deepEqual(
+    (model as any).radialVisibleIds?.(nodes, "root", null, true),
+    ["root", "a", "b", "a1", "b1"],
+  );
+});

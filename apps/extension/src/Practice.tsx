@@ -7,6 +7,7 @@ import type {
 import { Button, Chip, Segmented, Textarea } from "./components";
 import { Icon } from "./Icon";
 import { Evidence } from "./Trail";
+import { Matching } from "./Matching";
 type Study = AnalysisData["studyItems"][number];
 export function Practice({
   session,
@@ -31,16 +32,23 @@ export function Practice({
             i.conceptIds.includes(requested.source) &&
             i.conceptIds.includes(requested.target),
         ) ?? -1;
-  const [mode, setMode] = useState("connection"),
-    [index, setIndex] = useState(Math.max(0, initial)),
+  const [mode, setMode] = useState("quiz"),
+    [index, setIndex] = useState(0),
     [revealed, reveal] = useState(false),
     [answer, setAnswer] = useState(""),
     [choice, setChoice] = useState<number | null>(null),
     [flipped, flip] = useState(false),
-    [saving, setSaving] = useState(false);
+    [saving, setSaving] = useState(false),
+    [quizSaved, setQuizSaved] = useState(false);
   const epoch = useRef(0);
   const generated =
-    session.analysis?.studyItems.filter((i) => i.type === mode) ?? [];
+    session.analysis?.studyItems.filter(
+      (i) =>
+        i.type === mode &&
+        (!(requested && (mode === "quiz" || mode === "connection")) ||
+          (i.conceptIds.includes(requested.source) &&
+            i.conceptIds.includes(requested.target))),
+    ) ?? [];
   const edgeOnly = mode === "connection" && requested && initial < 0;
   const fallback: Study | undefined = edgeOnly
     ? {
@@ -77,6 +85,7 @@ export function Practice({
     setAnswer("");
     setChoice(null);
     flip(false);
+    setQuizSaved(false);
   }
   function next() {
     setIndex((i) => (i + 1) % Math.max(1, items.length));
@@ -104,6 +113,29 @@ export function Practice({
       setSaving(false);
     }
   }
+  async function answerQuiz(selected: number) {
+    if (!item || saving) return;
+    const started = epoch.current;
+    setChoice(selected);
+    setSaving(true);
+    try {
+      const ok = await onReview({
+        id: crypto.randomUUID(),
+        studyId: item.id,
+        analysisVersion: session.version,
+        response: item.choices![selected],
+        choice: selected,
+        rating: selected === item.correctIndex ? "understood" : "again",
+        timestamp: new Date().toISOString(),
+      });
+      if (ok && epoch.current === started) {
+        setQuizSaved(true);
+        onToast("Answer recorded");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
   function feedback() {
     if (!item) return;
     onFeedback(
@@ -119,9 +151,10 @@ export function Practice({
             label="Practice modes"
             value={mode}
             options={[
+              { value: "quiz", label: "Quiz" },
+              { value: "matching", label: "Matching" },
               { value: "connection", label: "Explain the connection" },
               { value: "flashcard", label: "Flashcards" },
-              { value: "quiz", label: "Quiz" },
             ]}
             onChange={(m) => {
               setMode(m);
@@ -155,8 +188,20 @@ export function Practice({
             <p>
               Ask Go to generate {mode === "connection" ? "connection" : mode}{" "}
               activities from your sources. Enable this activity in session
-              preferences before processing new finds.
+              preferences before processing new finds, or explicitly ask Go to
+              rebuild this activity.
             </p>
+            <Button
+              primary
+              icon="handoff"
+              onClick={() =>
+                onFeedback(
+                  `Explicitly rebuild ${mode} practice for RabbitHole session ${session.id}${requested ? `, focused on relationship ${requested.id}` : ""}. Retrieve the existing evidence texts first. Preserve the full existing map and unchanged activities. Save using intent "rebuild", expectedVersion from the read, and processedCaptureIds [] if no new captures were inspected. For quiz use four plausible choices, a correctIndex, and choiceExplanations tied to this trail; for matching use unique idea-meaning pairs. This is an explicit request for this activity even if older preferences omitted it.`,
+                )
+              }
+            >
+              Ask Go to prepare this activity
+            </Button>
           </div>
         ) : (
           <>
@@ -164,6 +209,15 @@ export function Practice({
               {session.attempts.filter((a) => a.studyId === item.id).length}{" "}
               saved attempts
             </p>
+            {mode === "matching" && (
+              <Matching
+                key={`${session.version}:${item.id}`}
+                item={item}
+                session={session}
+                onReview={onReview}
+                onToast={onToast}
+              />
+            )}
             {mode === "connection" && (
               <>
                 <div
@@ -226,7 +280,11 @@ export function Practice({
                       Explanation <Chip>{provenance}</Chip>
                     </h3>
                     <p>{item.answer}</p>
-                    <Evidence session={session} ids={item.captureIds} />
+                    <Evidence
+                      session={session}
+                      ids={item.captureIds}
+                      excerpts={item.evidence}
+                    />
                     {edgeOnly ? (
                       <p>
                         This tunnel has no saved Go study item yet. Ask Go to
@@ -333,6 +391,15 @@ export function Practice({
             )}
             {mode === "quiz" && (
               <>
+                {item.level && (
+                  <Chip>
+                    {item.level === "transfer"
+                      ? "Transfer to a new situation"
+                      : item.level === "apply"
+                        ? "Apply what you read"
+                        : "Check your understanding"}
+                  </Chip>
+                )}
                 <h2 className="prompt">{item.prompt}</h2>
                 <ul className="choices">
                   {item.choices?.map((c, i) => (
@@ -340,7 +407,7 @@ export function Practice({
                       <button
                         className={`choice ${choice === null ? "" : i === item.correctIndex ? "right" : i === choice ? "wrong" : "fade"}`}
                         disabled={choice !== null}
-                        onClick={() => setChoice(i)}
+                        onClick={() => void answerQuiz(i)}
                       >
                         <span className="key">
                           {String.fromCharCode(65 + i)}
@@ -357,8 +424,26 @@ export function Practice({
                         {choice === item.correctIndex ? "Correct" : "Not quite"}
                       </strong>
                       <p>{item.answer}</p>
+                      {item.choiceExplanations && (
+                        <div className="choice-reasons">
+                          <h3>Why these options differ</h3>
+                          {item.choices?.map((text, i) => (
+                            <p key={i}>
+                              <b>
+                                {String.fromCharCode(65 + i)}. {text}
+                              </b>
+                              <span>{item.choiceExplanations![i]}</span>
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                      {quizSaved && <p>Answer recorded</p>}
                       <Chip>{provenance}</Chip>
-                      <Evidence session={session} ids={item.captureIds} />
+                      <Evidence
+                        session={session}
+                        ids={item.captureIds}
+                        excerpts={item.evidence}
+                      />
                       <small>Choice grading is deterministic.</small>
                     </div>
                     <div className="p-actions">
@@ -366,14 +451,14 @@ export function Practice({
                         primary
                         disabled={saving}
                         onClick={() =>
-                          rate(
-                            choice === item.correctIndex
-                              ? "understood"
-                              : "again",
-                          )
+                          quizSaved ? next() : void answerQuiz(choice)
                         }
                       >
-                        Next question
+                        {quizSaved
+                          ? "Next question"
+                          : saving
+                            ? "Recording answer…"
+                            : "Retry saving answer"}
                       </Button>
                     </div>
                   </>

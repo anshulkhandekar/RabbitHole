@@ -9,18 +9,27 @@ import {
 } from "./ui-model";
 import { Icon } from "./Icon";
 import { Chip, Button } from "./components";
-export function SourceQuote({ session, id }: { session: Session; id: string }) {
+export function SourceQuote({
+  session,
+  id,
+  quote,
+}: {
+  session: Session;
+  id: string;
+  quote?: string;
+}) {
   const capture = session.captures.find((c) => c.id === id);
   if (!capture) return <p>Evidence unavailable for this capture.</p>;
+  const excerpt = quote ?? capture.text.slice(0, 180);
   return (
     <blockquote
       className={`source-quote ${capture.sourceType === "highlight" ? "quoted-highlight" : ""}`}
     >
       <div className="quoted-text">
-        {capture.text.slice(0, 500)}
-        {capture.text.length > 500 ? "…" : ""}
+        {excerpt}
+        {!quote && capture.text.length > excerpt.length ? "…" : ""}
       </div>
-      {capture.text.length > 500 && (
+      {capture.text !== excerpt && (
         <details>
           <summary>Read captured text</summary>
           <div className="quoted-text">{capture.text}</div>
@@ -44,14 +53,21 @@ export function SourceQuote({ session, id }: { session: Session; id: string }) {
 export function Evidence({
   session,
   ids,
+  excerpts,
 }: {
   session: Session;
   ids: string[];
+  excerpts?: { captureId: string; quote: string }[];
 }) {
   return (
     <div className="evidence">
       {ids.map((id) => (
-        <SourceQuote key={id} session={session} id={id} />
+        <SourceQuote
+          key={id}
+          session={session}
+          id={id}
+          quote={excerpts?.find((e) => e.captureId === id)?.quote}
+        />
       ))}
     </div>
   );

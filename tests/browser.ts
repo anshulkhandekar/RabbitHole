@@ -106,7 +106,7 @@ try {
   await research.route("https://research.example/**", (r) =>
     r.fulfill({
       contentType: "text/html; charset=utf-8",
-      body: `<html><head><title>Parallel computing — test fixture</title></head><body><article><h1>How parallel execution works</h1><p id="passage">${"A GPU uses parallel execution to process many operations at once. ".repeat(14)}</p><p>Independent operations can run together. This is synthetic test material.</p></article><input value="DO NOT CAPTURE PASSWORD"><div contenteditable="true">DO NOT CAPTURE EDITABLE TEXT</div></body></html>`,
+      body: `<html><head><title>Parallel computing — test fixture</title></head><body><article><h1>How parallel execution works</h1><p id="passage">${"A GPU uses parallel execution to process many operations at once. ".repeat(14)}</p><p>Independent operations can run together. Dependent operations must wait for inputs. This is synthetic test material.</p></article><input value="DO NOT CAPTURE PASSWORD"><div contenteditable="true">DO NOT CAPTURE EDITABLE TEXT</div></body></html>`,
     }),
   );
   await research.goto("https://research.example/article");
@@ -124,6 +124,34 @@ try {
       (c: any) => !c.text.includes("DO NOT CAPTURE"),
     ),
   );
+  await ui.evaluate(() => chrome.runtime.sendMessage({ type: "reading-mode" }));
+  const indicator = research.locator("[data-rabbithole-reading]");
+  await indicator.waitFor();
+  assert.ok(
+    (await indicator.boundingBox())!.width <= 60,
+    "Reading mode should leave only a compact rabbit until hovered",
+  );
+  await indicator.hover();
+  await research.getByRole("button", { name: "Pause", exact: true }).click();
+  await research.getByRole("button", { name: "Resume", exact: true }).waitFor();
+  state = await ui.evaluate(() =>
+    chrome.runtime.sendMessage({ type: "state" }),
+  );
+  assert.equal(state.sessions[sessionId].status, "paused");
+  await research.getByRole("button", { name: "Resume", exact: true }).click();
+  await research.getByRole("button", { name: "Pause", exact: true }).waitFor();
+  await research.locator("h1").click();
+  await research.mouse.move(500, 300);
+  await research.screenshot({ path: "test-results/reading-indicator.png" });
+  await indicator.hover();
+  assert.equal(
+    await indicator.evaluate(
+      (el) => el.getAnimations({ subtree: true }).length,
+    ),
+    0,
+  );
+  await research.getByRole("button", { name: "Hide", exact: true }).click();
+  await indicator.waitFor({ state: "detached" });
   await research.evaluate(() => {
     const range = document.createRange();
     range.selectNodeContents(document.querySelector("#passage")!);
@@ -131,6 +159,92 @@ try {
     sel.removeAllRanges();
     sel.addRange(range);
   });
+  await research.waitForTimeout(1100);
+  state = await ui.evaluate(() =>
+    chrome.runtime.sendMessage({ type: "state" }),
+  );
+  assert.equal(
+    state.sessions[sessionId].captures.filter(
+      (c: any) => c.sourceType === "highlight",
+    ).length,
+    0,
+    "Selecting alone must not capture without opt-in",
+  );
+  await ui.evaluate(async (id) => {
+    const s = await chrome.runtime.sendMessage({ type: "state" });
+    await chrome.runtime.sendMessage({
+      type: "patch",
+      id,
+      patch: { settings: { ...s.sessions[id].settings, autoHighlights: true } },
+    });
+  }, sessionId);
+  await research.evaluate(() => {
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    const range = document.createRange();
+    range.selectNodeContents(document.querySelector("#passage")!);
+    selection.addRange(range);
+  });
+  await research.waitForTimeout(1100);
+  state = await ui.evaluate(() =>
+    chrome.runtime.sendMessage({ type: "state" }),
+  );
+  assert.equal(
+    state.sessions[sessionId].captures.filter(
+      (c: any) => c.sourceType === "highlight",
+    ).length,
+    0,
+    "A page script selecting text must not imitate a user highlight",
+  );
+  await research.locator("#passage").click({ clickCount: 3 });
+  await research.waitForTimeout(1300);
+  state = await ui.evaluate(() =>
+    chrome.runtime.sendMessage({ type: "state" }),
+  );
+  assert.equal(
+    state.sessions[sessionId].captures.filter(
+      (c: any) => c.sourceType === "highlight",
+    ).length,
+    1,
+    "Opted-in selection must save once without a shortcut",
+  );
+  await research.locator("[contenteditable]").click();
+  await research.evaluate(() => {
+    const r = document.createRange();
+    r.selectNodeContents(document.querySelector("[contenteditable]")!);
+    const s = window.getSelection()!;
+    s.removeAllRanges();
+    s.addRange(r);
+  });
+  await research.waitForTimeout(1000);
+  state = await ui.evaluate(() =>
+    chrome.runtime.sendMessage({ type: "state" }),
+  );
+  assert.equal(
+    state.sessions[sessionId].captures.filter(
+      (c: any) => c.sourceType === "highlight",
+    ).length,
+    1,
+    "Editable selections must not become highlights",
+  );
+  await research.locator("#passage").click();
+  await research.evaluate(() => {
+    const r = document.createRange();
+    r.selectNodeContents(document.querySelector("#passage")!);
+    const s = window.getSelection()!;
+    s.removeAllRanges();
+    s.addRange(r);
+  });
+  await ui.evaluate(async (id) => {
+    const s = await chrome.runtime.sendMessage({ type: "state" });
+    await chrome.runtime.sendMessage({
+      type: "patch",
+      id,
+      patch: {
+        settings: { ...s.sessions[id].settings, autoHighlights: false },
+      },
+    });
+  }, sessionId);
   await worker.evaluate(async () => {
     const [tab] = await chrome.tabs.query({
       active: true,
@@ -256,6 +370,131 @@ try {
     label: "can accelerate",
     evidenceKind: "inference" as any,
   });
+  fixture.overview = {
+    rootConceptId: "n1",
+    summary:
+      "This synthetic trail connects a GPU to parallel execution and asks when independence matters.",
+    takeaways: [
+      "Independent operations can run together.",
+      "Dependencies limit parallel execution.",
+    ],
+    route: ["n1", "n2"],
+  };
+  fixture.concepts[1].parentId = "n1";
+  fixture.concepts[0].takeaways = ["A GPU runs independent work concurrently."];
+  fixture.concepts[0].example =
+    "Independent operations can be assigned to different workers; dependent operations must wait.";
+  fixture.concepts[0].boundary =
+    "The captured example does not establish that every workload runs faster.";
+  fixture.concepts[0].evidence = [
+    {
+      captureId: evidence,
+      quote:
+        "A GPU uses parallel execution to process many operations at once.",
+    },
+  ];
+  fixture.studyItems[0].choices = [
+    "Sequential only",
+    "Parallel execution",
+    "Only higher clock speed",
+    "Only more memory",
+  ];
+  fixture.studyItems[0].choiceExplanations = [
+    "The captured sentence describes multiple operations at once, not sequential-only execution.",
+    "This matches the captured sentence about parallel execution.",
+    "The source does not attribute concurrency to clock speed.",
+    "Memory capacity does not describe the execution model in this source.",
+  ];
+  fixture.studyItems.push({
+    id: "m1",
+    type: "matching",
+    prompt: "Match the ideas to their meanings",
+    answer:
+      "A GPU is a processor; parallel execution describes operations proceeding at once.",
+    pairs: [
+      { left: "GPU", right: "Processor" },
+      { left: "Parallel execution", right: "Concurrent operations" },
+    ],
+    conceptIds: ["n1", "n2"],
+    captureIds: [evidence],
+  });
+  fixture.concepts.push(
+    {
+      id: "n3",
+      label: "Work independence",
+      explanation:
+        "This synthetic example distinguishes operations that can proceed together from those waiting for inputs.",
+      captureIds: [evidence],
+      parentId: "n1",
+      takeaways: ["Independent work does not need an earlier result."],
+      example: "Two independent calculations can start together.",
+      boundary: "A dependency changes that conclusion.",
+    },
+    {
+      id: "n4",
+      label: "Dependency constraints",
+      explanation:
+        "A dependency requires an operation to wait for its input, limiting which work can proceed at the same time.",
+      captureIds: [evidence],
+      parentId: "n1",
+    },
+    {
+      id: "n5",
+      label: "Concurrent work units",
+      explanation:
+        "Independent operations form work units that can proceed together in this synthetic example.",
+      captureIds: [evidence],
+      parentId: "n3",
+    },
+    {
+      id: "n6",
+      label: "Waiting for inputs",
+      explanation:
+        "Dependent operations wait for inputs in the synthetic example.",
+      captureIds: [evidence],
+      parentId: "n4",
+    },
+  );
+  fixture.edges.push(
+    {
+      id: "e3",
+      source: "n1",
+      target: "n3",
+      label: "needs independent work for concurrency",
+      explanation:
+        "The synthetic example contrasts independent operations with waiting for inputs.",
+      captureIds: [evidence],
+      evidenceKind: "supported",
+    },
+    {
+      id: "e4",
+      source: "n4",
+      target: "n1",
+      label: "limits available concurrency",
+      explanation:
+        "Waiting for required inputs limits concurrent execution in this synthetic example.",
+      captureIds: [evidence],
+      evidenceKind: "supported",
+    },
+    {
+      id: "e5",
+      source: "n3",
+      target: "n5",
+      label: "permits",
+      explanation: "Independent units can proceed together.",
+      captureIds: [evidence],
+      evidenceKind: "supported",
+    },
+    {
+      id: "e6",
+      source: "n4",
+      target: "n6",
+      label: "requires",
+      explanation: "Dependent operations wait for inputs.",
+      captureIds: [evidence],
+      evidenceKind: "supported",
+    },
+  );
   fixture.title = "SYNTHETIC UI TEST · Parallel computing";
   console.log("CHECK fixture saved");
   store.save("test", fixture);
@@ -276,12 +515,66 @@ try {
         .evaluate((el) => getComputedStyle(el).fontFamily)
     ).includes("Literata"),
   );
+  // Regression: background writes must not replace the inspector and collapse native details.
+  const sourceDetails = ui.locator(".inspector .source-quote details").first();
+  await sourceDetails.locator("summary").click();
+  await expect(sourceDetails).toHaveAttribute("open", "");
+  await ui.evaluate(async (id) => {
+    const s = await chrome.runtime.sendMessage({ type: "state" });
+    await chrome.runtime.sendMessage({
+      type: "patch",
+      id,
+      patch: {
+        settings: {
+          ...s.sessions[id].settings,
+          analogy: "A changed preference in a synthetic background update",
+        },
+      },
+    });
+    await chrome.runtime.sendMessage({ type: "refresh" });
+  }, sessionId);
+  await ui.waitForTimeout(200); // Let the storage-change render settle before checking retention.
+  await expect(sourceDetails).toHaveAttribute("open", "");
   console.log("CHECK check lit labels");
-  await expect(ui.locator(".edge-label.visible")).toHaveCount(2);
+  await expect(ui.locator(".edge-label.visible")).toHaveCount(4);
   assert.equal(await ui.locator(".tunnel.inferred").count(), 1);
+  await ui.getByRole("button", { name: "Trail depth", exact: true }).click();
   await ui.getByText("Depth 3", { exact: true }).waitFor();
+  await ui.getByRole("button", { name: "Radial map", exact: true }).click();
+  await ui.emulateMedia({
+    colorScheme: "light",
+    reducedMotion: "no-preference",
+  });
+  assert.equal(
+    await ui
+      .locator(".burrow")
+      .evaluate(
+        (el) =>
+          el
+            .getAnimations({ subtree: true })
+            .filter((a) => a.playState === "running").length,
+      ),
+    0,
+    "The map must be static, including with motion enabled",
+  );
+  await ui.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  await ui.locator('.react-flow__node[data-id="n1"]').focus();
   await ui.keyboard.press("Escape");
   await expect(ui.locator(".edge-label.visible")).toHaveCount(0);
+  await expect(ui.locator(".react-flow__node")).toHaveCount(4);
+  await ui.locator('.react-flow__node[data-id="n3"]').focus();
+  await ui.keyboard.press("Enter");
+  await expect(ui.locator('.react-flow__node[data-id="n5"]')).toBeVisible();
+  await expect(ui.locator('.react-flow__node[data-id="n4"]')).toHaveCount(0);
+  await ui
+    .getByRole("button", { name: "Return to map overview", exact: true })
+    .click();
+  await expect(ui.locator(".react-flow__node")).toHaveCount(4);
+  await ui.getByRole("button", { name: "Show all ideas", exact: true }).click();
+  await expect(ui.locator(".react-flow__node")).toHaveCount(6);
+  await ui
+    .getByRole("button", { name: "Focus on branches", exact: true })
+    .click();
   await ui.getByRole("button", { name: "List view", exact: true }).click();
   await ui.getByRole("button", { name: "GPU", exact: true }).click();
   await ui.getByRole("button", { name: "Map view", exact: true }).click();
@@ -301,7 +594,18 @@ try {
     fullPage: true,
   });
   await ui.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
-  await ui.getByRole("tab", { name: "Practice", exact: true }).click();
+  await ui
+    .getByRole("button", { name: "GPU uses Parallel execution", exact: true })
+    .click();
+  await ui
+    .getByRole("button", { name: "Quiz this connection", exact: true })
+    .click();
+  await expect(
+    ui.getByRole("tab", { name: "Quiz", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await ui
+    .getByRole("tab", { name: "Explain the connection", exact: true })
+    .click();
   await ui
     .getByLabel("Your explanation")
     .fill("It runs independent operations at once.");
@@ -356,11 +660,62 @@ try {
     .getByRole("button", { name: "B Parallel execution", exact: true })
     .click();
   await ui.getByText("Correct", { exact: true }).waitFor();
+  await ui
+    .locator(".why")
+    .getByText("Answer recorded", { exact: true })
+    .waitFor();
+  assert.equal(
+    store
+      .get("test", sessionId)
+      .attempts.some((a) => a.studyId === "q1" && a.choice === 1),
+    true,
+  );
+  await ui.screenshot({
+    path: "test-results/reading-quiz.png",
+    fullPage: true,
+  });
+  const choiceBoxes = await ui.locator(".choice").evaluateAll((es) =>
+    es.map((e) => ({
+      x: e.getBoundingClientRect().x,
+      y: e.getBoundingClientRect().y,
+    })),
+  );
+  assert.equal(choiceBoxes[0].y, choiceBoxes[1].y);
+  assert.ok(choiceBoxes[2].y > choiceBoxes[0].y);
+  await ui.getByRole("tab", { name: "Matching", exact: true }).click();
+  await ui.getByRole("button", { name: "Idea: GPU", exact: true }).click();
+  await ui
+    .getByRole("button", {
+      name: "Meaning: Concurrent operations",
+      exact: true,
+    })
+    .click();
+  await ui
+    .getByRole("button", { name: "Idea: Parallel execution", exact: true })
+    .click();
+  await ui
+    .getByRole("button", { name: "Meaning: Processor", exact: true })
+    .click();
+  await ui.getByRole("button", { name: "Check matches", exact: true }).click();
+  await ui.getByText("0 of 2 matched correctly", { exact: true }).waitFor();
+  await ui
+    .locator(".matching")
+    .getByText("Matching result recorded", { exact: true })
+    .waitFor();
+  await ui.screenshot({
+    path: "test-results/reading-matching.png",
+    fullPage: true,
+  });
+  assert.deepEqual(
+    store.get("test", sessionId).attempts.find((a) => a.studyId === "m1")
+      ?.matches,
+    [1, 0],
+  );
   await ui.getByRole("tab", { name: /^Sources/ }).click();
   await ui.getByText("On the map", { exact: true }).first().waitFor();
   await ui.reload();
   await ui.getByRole("heading", { name: fixture.title, exact: true }).waitFor();
-  assert.equal(store.get("test", sessionId).attempts.length, 1);
+  assert.equal(store.get("test", sessionId).attempts.length, 3);
   // Exercise the real packaged panel at 320px, both colour schemes and reduced motion.
   await ui.setViewportSize({ width: 320, height: 850 });
   for (const scheme of ["light", "dark"] as const) {
@@ -495,7 +850,7 @@ try {
     { id: sessionId },
   );
   assert.ok(queued.queue.length > 0);
-  assert.equal(store.get("test", sessionId).attempts.length, 1);
+  assert.equal(store.get("test", sessionId).attempts.length, 3);
   await context.close();
   const restored = await chromium.launchPersistentContext(profile, {
     channel: "chromium",
@@ -513,7 +868,7 @@ try {
       chrome.runtime.sendMessage({ type: "state" }),
     );
     assert.ok(beforeRetry.queue.length > 0);
-    assert.equal(beforeRetry.sessions[sessionId].attempts.length, 2);
+    assert.equal(beforeRetry.sessions[sessionId].attempts.length, 4);
     assert.equal(beforeRetry.sessions[sessionId].status, "paused");
     assert.deepEqual(beforeRetry.tabs, {});
     backendAvailable = true;
@@ -521,7 +876,7 @@ try {
       chrome.runtime.sendMessage({ type: "refresh" }),
     );
     assert.equal(synced.queue.length, 0);
-    assert.equal(store.get("test", sessionId).attempts.length, 2);
+    assert.equal(store.get("test", sessionId).attempts.length, 4);
     // Offline deletion removes pending writes and cannot be resurrected by refresh.
     backendAvailable = false;
     const deleted = await recovered.evaluate(
@@ -541,7 +896,7 @@ try {
   assert.deepEqual(failures, []);
   assert.deepEqual(remoteFontRequests, []);
   console.log(
-    "PASS redesign: 320px light/dark, offline/paused/handoff states, single primary action, real evidence depth, inferred tunnels, keyboard selection, local fonts, partial ratings and practice-mode save race; packaged Chrome extension: pregranted website permissions (native prompt untested), automatic search/article capture, input exclusion, highlight, pause, unrelated tab exclusion, explicit include, authenticated sync, persisted fixture display, evidence, recall progress, quiz, flashcard, reload, narrow layout, interrupted delivery, browser profile restart with queued review, retry, and offline deletion without resurrection. Go generation NOT exercised.",
+    "PASS reading first: opt-in trusted selection; programmatic/editable selection excluded; compact indicator pause/resume/hide; disclosure retained across changed storage; static radial/trail map; scoped quiz with immediate persisted grading; matching checked/persisted; 320px light/dark, offline/paused/handoff states, single primary action, real evidence depth, inferred tunnels, keyboard selection, local fonts, partial ratings and practice-mode save race; packaged Chrome extension: pregranted website permissions (native prompt untested), automatic search/article capture, input exclusion, highlight, pause, unrelated tab exclusion, explicit include, authenticated sync, persisted fixture display, evidence, recall progress, quiz, flashcard, reload, narrow layout, interrupted delivery, browser profile restart with queued review, retry, and offline deletion without resurrection. Go generation NOT exercised.",
   );
 } catch (error) {
   console.error("UI failures:", failures);

@@ -132,7 +132,7 @@ export function createApp(
       "SaveSessionAnalysis",
       {
         description:
-          "Replace the complete analysis atomically, merging prior concepts and preserving stable IDs. Only processedCaptureIds from retrieved pending batches. Validate all evidence. Requires user confirmation. Never invoke for no-new-content runs.",
+          "Replace the complete analysis atomically, merging prior concepts and preserving stable IDs. Only processedCaptureIds from retrieved pending batches. Optional overview, hierarchy, examples and exact evidence excerpts build a learning guide. Ordinary no-new-content runs must not save. An explicitly requested rebuild may use intent rebuild and processedCaptureIds [] after retrieving existing evidence. Validate quotations and matching pairs. Requires user confirmation.",
         inputSchema: AnalysisInput.shape,
         annotations: {
           readOnlyHint: false,

@@ -1,5 +1,7 @@
 # RabbitHole UI redesign verification
 
+This records the earlier design baseline. The [reading-first iteration](reading-first.md) supersedes its default map layout, motion, practice priority and inspector excerpts.
+
 The redesign follows `/Users/anshulkhandekar/ai-toolkit/smoke-test/rabbithole-design/README.md`, in its foundation → side panel → workspace → map → practice → motion/responsive order. Both HTTP-served prototypes were inspected. Fixture text was used only as a design reference; `data.js` is not included in the product. `FUTURE.md` was not read or implemented.
 
 ## Implemented

@@ -59,6 +59,7 @@ function App() {
     [view, setView] = useState("map"),
     [selected, setSelected] = useState<Selection>(null),
     [list, setList] = useState(false),
+    [railOpen, setRailOpen] = useState(false),
     [menu, setMenu] = useState(false),
     [creating, setCreating] = useState(false),
     [curiosity, setCuriosity] = useState(""),
@@ -294,8 +295,12 @@ function App() {
     }
   }
   async function sendToGo(custom?: string) {
-    if (!session || !online) return;
-    if (!custom && queued) {
+    if (!session) return;
+    if (!online) {
+      setError("You’re offline. Reconnect before handing this to Go.");
+      return;
+    }
+    if (queued) {
       await sync();
       const current = await request("state");
       apply(current);
@@ -327,6 +332,12 @@ function App() {
       );
     }
     setHandoff({ ...receipt });
+  }
+  function rebuild() {
+    if (session)
+      void sendToGo(
+        `Rebuild the learning guide for RabbitHole session ${session.id} from its existing captured sources. This is an explicit rebuild request, not a request to mark new captures processed. Retrieve GetSession and the relevant existing evidence texts using captureIds (up to 24 sources this run); preserve unreviewed material and stable IDs. Save the complete analysis using intent "rebuild", expectedVersion from the read and processedCaptureIds [] if no new captures were inspected. Add a source-grounded overview, rootConceptId and reading route, parentId hierarchy, useful takeaways, concrete examples, limitations and exact evidence excerpts. Generate a challenging four-option quiz with misconception distractors and a reason for each choice, plus matching if selected. Clearly state which sources you reviewed.`,
+      );
   }
   function exported() {
     if (!session) return;
@@ -798,7 +809,7 @@ function App() {
       </main>
     );
   return (
-    <div className={panel ? "panel" : "ws"}>
+    <div className={panel ? "panel" : `ws ${railOpen ? "" : "rail-collapsed"}`}>
       <div className="app-surface" inert={settings || preferences}>
         <header className={panel ? "p-head" : "topbar"}>
           <Brand
@@ -833,6 +844,26 @@ function App() {
             </div>
           )}
           <div className="tb-actions">
+            {!panel && (
+              <IconButton
+                name="list"
+                className="rail-toggle icon-btn"
+                label={railOpen ? "Hide rabbit holes" : "Show rabbit holes"}
+                onClick={() => setRailOpen((v) => !v)}
+              />
+            )}
+            {panel && session && (
+              <IconButton
+                name="minus"
+                label="Read without sidebar"
+                onClick={async () => {
+                  await action("reading-mode");
+                  showToast(
+                    "Reading mode on. Close the panel with Chrome’s close button if it remains open.",
+                  );
+                }}
+              />
+            )}
             {!panel && session && !creating && (
               <Button
                 primary
@@ -947,6 +978,16 @@ function App() {
                         {list ? "Map view" : "List view"}
                       </Button>
                     )}
+                    {view === "map" && session.analysis && (
+                      <Button
+                        quiet
+                        icon="handoff"
+                        disabled={busy || !online}
+                        onClick={rebuild}
+                      >
+                        Rebuild with Go
+                      </Button>
+                    )}
                     <Button
                       quiet
                       icon={session.status === "active" ? "pause" : "play"}
@@ -984,12 +1025,14 @@ function App() {
                   <div className="view">
                     {view === "map" ? (
                       <MapView
+                        key={session.id}
                         session={session}
                         list={list}
                         selected={selected}
                         onSelect={setSelected}
+                        onRebuild={rebuild}
                         onPractice={(id) => {
-                          setPracticeEdge(id);
+                          setPracticeEdge(id || undefined);
                           setView("practice");
                         }}
                       />
@@ -1173,6 +1216,7 @@ function App() {
                   <label>
                     Explanation depth
                     <select
+                      aria-label="Explanation depth"
                       value={session.settings.depth}
                       onChange={(e) =>
                         patch({
@@ -1219,38 +1263,73 @@ function App() {
                     />
                     Automatically capture readable article text
                   </label>
+                  <label className="check">
+                    <input
+                      type="checkbox"
+                      checked={session.settings.autoHighlights ?? false}
+                      onChange={(e) =>
+                        patch({
+                          settings: {
+                            ...session.settings,
+                            autoHighlights: e.target.checked,
+                          },
+                        })
+                      }
+                    />
+                    Save text selections automatically
+                  </label>
+                  <p className="muted">
+                    Opt in for this rabbit hole. Selecting page text saves a
+                    highlight after a short pause, without a shortcut. Editable
+                    fields are excluded. Turn this off if you select only to
+                    focus your eyes.
+                  </p>
+                  <Button
+                    icon="minus"
+                    onClick={async () => {
+                      setPreferences(false);
+                      await action("reading-mode");
+                    }}
+                  >
+                    Read without sidebar
+                  </Button>
                   <fieldset>
                     <legend>Study activities</legend>
-                    {["connection", "flashcard", "quiz"].map((v) => (
-                      <label className="check" key={v}>
-                        <input
-                          type="checkbox"
-                          checked={session.settings.activities.includes(
-                            v as any,
-                          )}
-                          onChange={(e) => {
-                            const activities = e.target.checked
-                              ? [...session.settings.activities, v]
-                              : session.settings.activities.filter(
-                                  (a) => a !== v,
-                                );
-                            if (activities.length)
-                              void patch({
-                                settings: { ...session.settings, activities },
-                              });
-                          }}
-                        />
-                        {v === "connection"
-                          ? "Explain the connection"
-                          : v === "flashcard"
-                            ? "Flashcards"
-                            : "Quiz"}
-                      </label>
-                    ))}
+                    {["quiz", "matching", "connection", "flashcard"].map(
+                      (v) => (
+                        <label className="check" key={v}>
+                          <input
+                            type="checkbox"
+                            checked={session.settings.activities.includes(
+                              v as any,
+                            )}
+                            onChange={(e) => {
+                              const activities = e.target.checked
+                                ? [...session.settings.activities, v]
+                                : session.settings.activities.filter(
+                                    (a) => a !== v,
+                                  );
+                              if (activities.length)
+                                void patch({
+                                  settings: { ...session.settings, activities },
+                                });
+                            }}
+                          />
+                          {v === "connection"
+                            ? "Explain the connection"
+                            : v === "flashcard"
+                              ? "Flashcards"
+                              : v === "matching"
+                                ? "Matching"
+                                : "Quiz"}
+                        </label>
+                      ),
+                    )}
                   </fieldset>
                   <p className="muted">
-                    Preferences apply to future Go processing. Saved material
-                    won’t silently regenerate.
+                    Capture settings apply now. Explanation depth and study
+                    preferences apply the next time you process or rebuild with
+                    Go. Saved material won’t silently regenerate.
                   </p>
                   <label>
                     Rename session

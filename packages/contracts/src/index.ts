@@ -13,11 +13,12 @@ export const Preferences = z.object({
   depth: z.enum(["brief", "balanced", "deep"]).default("balanced"),
   analogy: z.string().max(300).default("everyday examples"),
   activities: z
-    .array(z.enum(["connection", "flashcard", "quiz"]))
+    .array(z.enum(["connection", "flashcard", "quiz", "matching"]))
     .min(1)
-    .max(3)
-    .default(["connection", "flashcard", "quiz"]),
+    .max(4)
+    .default(["quiz", "matching"]),
   articleCapture: z.boolean().default(true),
+  autoHighlights: z.boolean().default(false),
 });
 export const Capture = z.object({
   id: Id,
@@ -32,12 +33,21 @@ export const Capture = z.object({
   references: z.array(HttpUrl).max(20).default([]),
 });
 const Evidence = z.array(Id).min(1).max(20);
+const Excerpts = z
+  .array(z.object({ captureId: Id, quote: z.string().trim().min(1).max(600) }))
+  .max(3)
+  .optional();
 export const Concept = z.object({
   id: Id,
   label: z.string().min(1).max(90),
   explanation: z.string().min(1).max(1800),
   captureIds: Evidence,
   gap: z.string().max(500).optional(),
+  parentId: Id.optional(),
+  takeaways: z.array(z.string().min(1).max(400)).max(5).optional(),
+  example: z.string().max(900).optional(),
+  boundary: z.string().max(700).optional(),
+  evidence: Excerpts,
 });
 export const Edge = z.object({
   id: Id,
@@ -47,19 +57,56 @@ export const Edge = z.object({
   explanation: z.string().min(1).max(1800),
   captureIds: Evidence,
   evidenceKind: z.enum(["supported", "inference", "supplemental"]),
+  example: z.string().max(900).optional(),
+  evidence: Excerpts,
 });
 export const Study = z
   .object({
     id: Id,
-    type: z.enum(["connection", "flashcard", "quiz"]),
+    type: z.enum(["connection", "flashcard", "quiz", "matching"]),
     prompt: z.string().min(1).max(600),
     answer: z.string().min(1).max(1800),
     choices: z.array(z.string().min(1).max(300)).min(2).max(5).optional(),
     correctIndex: z.number().int().min(0).optional(),
+    choiceExplanations: z
+      .array(z.string().min(1).max(500))
+      .min(2)
+      .max(5)
+      .optional(),
+    level: z.enum(["understand", "apply", "transfer"]).optional(),
+    pairs: z
+      .array(
+        z.object({
+          left: z.string().min(1).max(180),
+          right: z.string().min(1).max(400),
+        }),
+      )
+      .min(2)
+      .max(6)
+      .optional(),
+    evidence: Excerpts,
     conceptIds: z.array(Id).min(1).max(10),
     captureIds: Evidence,
   })
   .superRefine((v, c) => {
+    if (
+      v.choiceExplanations &&
+      v.choiceExplanations.length !== v.choices?.length
+    )
+      c.addIssue({
+        code: "custom",
+        message: "Choice explanations must match choices",
+      });
+    if (
+      v.type === "matching" &&
+      (!v.pairs ||
+        new Set(v.pairs.map((p) => p.left)).size !== v.pairs.length ||
+        new Set(v.pairs.map((p) => p.right)).size !== v.pairs.length)
+    )
+      c.addIssue({
+        code: "custom",
+        message: "Matching requires distinct pairs",
+      });
     if (
       v.type === "quiz" &&
       (!v.choices ||
@@ -76,10 +123,19 @@ export const AnalysisInput = z.object({
   sessionId: Id,
   expectedVersion: z.number().int().min(0),
   title: z.string().min(1).max(140),
+  intent: z.enum(["incremental", "rebuild"]).optional(),
+  overview: z
+    .object({
+      rootConceptId: Id,
+      summary: z.string().min(1).max(1600),
+      takeaways: z.array(z.string().min(1).max(400)).min(1).max(5),
+      route: z.array(Id).min(1).max(12),
+    })
+    .optional(),
   concepts: z.array(Concept).min(1).max(40),
   edges: z.array(Edge).max(70),
   studyItems: z.array(Study).max(40),
-  processedCaptureIds: z.array(Id).min(1).max(100),
+  processedCaptureIds: z.array(Id).max(100),
 });
 export type CaptureData = z.infer<typeof Capture>;
 export type AnalysisData = z.infer<typeof AnalysisInput>;
@@ -106,6 +162,7 @@ export const Review = z.object({
   response: z.string().max(3000).default(""),
   rating: z.enum(["again", "partly", "understood"]),
   choice: z.number().int().min(0).optional(),
+  matches: z.array(z.number().int().min(0)).min(2).max(6).optional(),
   timestamp: z.string().datetime(),
 });
 export type Attempt = z.infer<typeof Review>;

@@ -172,6 +172,38 @@ export class Store {
       if (p.processedCaptureIds.some((id) => !captures.has(id)))
         throw new DomainError(422, "Unknown processed capture ID");
       const processed = new Set([...s.processed, ...p.processedCaptureIds]);
+      if (
+        p.overview &&
+        [p.overview.rootConceptId, ...p.overview.route].some(
+          (id) => !concepts.has(id),
+        )
+      )
+        throw new DomainError(422, "Unknown overview concept");
+      for (const concept of p.concepts) {
+        const seen = new Set([concept.id]);
+        let parent = concept.parentId;
+        while (parent) {
+          if (seen.has(parent) || !concepts.has(parent))
+            throw new DomainError(422, "Invalid hierarchy or cycle");
+          seen.add(parent);
+          parent = p.concepts.find((c) => c.id === parent)?.parentId;
+        }
+      }
+      const normalized = (text: string) => text.replace(/\s+/g, " ").trim();
+      for (const item of [...p.concepts, ...p.edges, ...p.studyItems])
+        for (const excerpt of item.evidence ?? []) {
+          const capture = s.captures.find((c) => c.id === excerpt.captureId);
+          if (
+            !capture ||
+            !item.captureIds.includes(excerpt.captureId) ||
+            !normalized(capture.text).includes(normalized(excerpt.quote))
+          )
+            throw new DomainError(
+              422,
+              "Evidence excerpt must be an exact source quotation",
+            );
+        }
+
       for (const item of [...p.concepts, ...p.edges, ...p.studyItems])
         if (
           item.captureIds.some((id) => !captures.has(id) || !processed.has(id))
@@ -190,10 +222,18 @@ export class Store {
       for (const q of p.studyItems)
         if (q.conceptIds.some((id) => !concepts.has(id)))
           throw new DomainError(422, "Unknown study concept");
-      if (p.processedCaptureIds.every((id) => s.processed.includes(id)))
+      if (
+        p.intent !== "rebuild" &&
+        p.processedCaptureIds.every((id) => s.processed.includes(id))
+      )
         throw new DomainError(
           409,
           "No new captures. Leave existing analysis intact.",
+        );
+      if (p.intent === "rebuild" && (!s.analysis || s.processed.length === 0))
+        throw new DomainError(
+          422,
+          "Rebuild requires an existing saved analysis",
         );
       const oldOrder = new Map(
         s.analysis?.concepts.map((c, i) => [c.id, i]) ?? [],
@@ -237,6 +277,26 @@ export class Store {
         (!item.choices || p.choice >= item.choices.length)
       )
         throw new DomainError(422, "Invalid answer choice");
+      let correct: boolean | null =
+        p.choice === undefined ? null : p.choice === item.correctIndex;
+      if (
+        item.type === "quiz" &&
+        p.choice !== undefined &&
+        p.rating !== (correct ? "understood" : "again")
+      )
+        throw new DomainError(422, "Quiz grade and rating disagree");
+      if (item.type === "matching") {
+        if (
+          !p.matches ||
+          p.matches.length !== item.pairs!.length ||
+          new Set(p.matches).size !== p.matches.length ||
+          p.matches.some((i) => i >= item.pairs!.length)
+        )
+          throw new DomainError(422, "Invalid matching answers");
+        correct = p.matches.every((v, i) => v === i);
+        if (p.rating !== (correct ? "understood" : "again"))
+          throw new DomainError(422, "Matching grade and rating disagree");
+      }
       if (!s.attempts.some((a) => a.id === p.id)) {
         if (s.attempts.length >= 2000)
           throw new DomainError(422, "Review limit reached");
@@ -245,7 +305,7 @@ export class Store {
       }
       return {
         saved: true,
-        correct: p.choice === undefined ? null : p.choice === item.correctIndex,
+        correct,
       };
     })();
   }

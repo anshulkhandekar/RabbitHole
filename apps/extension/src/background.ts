@@ -12,6 +12,7 @@ type Local = {
   queue: { id: string; method: string; path: string; body?: unknown }[];
   config: { backend: string; token: string; agentUrl: string };
   error?: string;
+  readingMode?: boolean;
 };
 const initial: Local = {
   sessions: {},
@@ -242,6 +243,45 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
     const internal =
       sender.id === chrome.runtime.id &&
       sender.url?.startsWith(chrome.runtime.getURL(""));
+    if (msg.type === "reading-context") {
+      const id = sender.tab?.id,
+        session = s.active ? s.sessions[s.active] : undefined;
+      if (
+        id === undefined ||
+        sender.tab?.incognito ||
+        s.tabs[id] !== session?.id ||
+        !session ||
+        s.excluded[session.id]?.includes(sender.tab!.url ?? "")
+      )
+        return null;
+      return {
+        id: session.id,
+        status: session.status,
+        settings: session.settings,
+        excluded: s.excluded[session.id] ?? [],
+        readingMode: s.readingMode ?? false,
+      };
+    }
+    if (msg.type === "reading-control") {
+      const id = sender.tab?.id,
+        session = s.active ? s.sessions[s.active] : undefined;
+      if (
+        id === undefined ||
+        sender.tab?.incognito ||
+        !session ||
+        s.tabs[id] !== session.id
+      )
+        throw new Error("This page is not in the active session");
+      if (msg.control === "hide") s.readingMode = false;
+      else if (msg.control === "pause" || msg.control === "resume") {
+        session.status = msg.control === "pause" ? "paused" : "active";
+        enqueue(s, "PATCH", `/api/sessions/${session.id}`, {
+          status: session.status,
+        });
+      } else throw new Error("Unknown reading control");
+      await flush(s);
+      return { saved: true };
+    }
     if (msg.type === "context") {
       const session = s.active ? s.sessions[s.active] : undefined;
       const allowed =
@@ -265,6 +305,8 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       const source = new URL(msg.capture?.url);
       if (!sender.url || new URL(sender.url).origin !== source.origin)
         throw new Error("Capture origin mismatch");
+      if (msg.automatic && !s.sessions[s.active ?? ""]?.settings.autoHighlights)
+        return { ignored: true };
       return capture(s, msg.capture, sender.tab.id);
     }
     if (!internal)
@@ -284,6 +326,26 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
         excluded:
           !!tab?.url && (s.excluded[s.active ?? ""] ?? []).includes(tab.url),
       };
+    }
+    if (msg.type === "reading-mode") {
+      s.readingMode = true;
+      const [tab] = await chrome.tabs.query({
+        active: true,
+        lastFocusedWindow: true,
+      });
+      if (tab?.id !== undefined && s.tabs[tab.id] === s.active)
+        await chrome.tabs
+          .sendMessage(tab.id, { type: "reading-update" })
+          .catch(() => {});
+      await persist(s);
+      const close = (
+        chrome.sidePanel as unknown as {
+          close?: (options: { windowId: number }) => Promise<void>;
+        }
+      ).close;
+      if (close && tab?.windowId !== undefined)
+        await close({ windowId: tab.windowId }).catch(() => {});
+      return s;
     }
     if (msg.type === "open-panel") {
       const [tab] = await chrome.tabs.query({
@@ -425,6 +487,15 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       session.attempts.push(msg.attempt);
       enqueue(s, "POST", `/api/sessions/${msg.id}/reviews`, msg.attempt);
     }
+    if (
+      ["patch", "exclude", "unexclude", "reading-mode", "select"].includes(
+        msg.type,
+      )
+    )
+      for (const id of Object.keys(s.tabs))
+        void chrome.tabs
+          .sendMessage(Number(id), { type: "reading-update" })
+          .catch(() => {});
     await flush(s);
     if (msg.type === "refresh" && s.config.token) {
       try {
@@ -474,6 +545,17 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
   });
 }
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  if (
+    msg.type === "reading-open" &&
+    sender.id === chrome.runtime.id &&
+    sender.tab?.windowId !== undefined
+  ) {
+    void chrome.sidePanel
+      .open({ windowId: sender.tab.windowId })
+      .then(() => reply({ opened: true }))
+      .catch(() => reply({ error: "Open RabbitHole from its toolbar icon" }));
+    return true;
+  }
   void handle(msg, sender)
     .then(reply)
     .catch((e) => reply({ error: e.message }));

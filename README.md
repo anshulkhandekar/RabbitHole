@@ -23,9 +23,9 @@ The setup command creates an ignored `.env` with a random personal token without
 2. Pin RabbitHole. Open a normal research webpage and click its toolbar action to open the side panel.
 3. Open Settings. Enter the backend URL, personal token, and your saved Go agent URL. Save and grant optional website access when Chrome asks.
 4. Start a session **from the side panel on your research tab**. Searches and readable pages are captured on that tab and observable child tabs. Other tabs need Include tab. Use Alt+Shift+H or the selection context menu for highlights. Reassign at `chrome://extensions/shortcuts` if needed.
-5. Inspect Sources. Pause stops new captures. Automatic sync sends the local queue to the backend; it does not invoke Go.
+5. Read without watching the trail: use **Read without sidebar** for a compact rabbit indicator. Automatic highlights are an opt-in session setting; manual selection shortcuts still work. Pause stops new captures. Automatic sync sends the local queue to the backend; it does not invoke Go.
 6. Deploy the backend and connect Go using [deployment](docs/deployment.md) and [agent setup](docs/go-agent-setup.md). Go cannot access localhost. Send to Go attempts to copy the precise session prompt and opens your agent. Paste/send it and approve a save when asked. The extension polls for an actual saved analysis; it never presents opening Go as generation.
-7. Explore the exact saved map/evidence, then try Explain the connection, flashcards, and quiz. A self-rating is not AI grading. Fresh feedback explicitly opens Go.
+7. Start at the main idea on the radial map, explore a branch, and inspect its short source excerpts. Practice opens on Quiz; matching provides another objective check. Open-response and flashcards remain optional. Use **Rebuild with Go** to enrich an older map without inventing new captures; paste/send and approve its save.
 
 The unpacked extension and a reachable backend are both required. Sharing the Go agent alone does not install the extension or grant backend access. On a browser restart the session is preserved and collection is paused; explicitly include a research tab and resume. Use a clean public-source profile for judging.
 
@@ -40,7 +40,7 @@ npm run test:browser  # isolated extension harness, synthetic pages and saved an
 
 For an existing Chromium install, set `CHROMIUM_PATH` to its executable. Browser tests copy the built extension into a temporary profile and pregrant hosts in a test-only manifest, since native permission dialogs cannot be reliably automated headlessly. They never modify the production manifest and never present fixtures as Go output. Production builds contain no fixture analysis or seeded study results.
 
-The [UI redesign verification](docs/ui-redesign.md) records the supplied design, local fonts, responsive states and evidence-depth layout. After rebuilding an installed unpacked extension, click **Reload** in `chrome://extensions` to activate its new UI, worker and icons. Your saved connection and sessions remain in Chrome storage.
+The [reading-first iteration](docs/reading-first.md) records the current behavior, rich-analysis contract and verification limits. The earlier [UI redesign verification](docs/ui-redesign.md) records the supplied design, local fonts, responsive states and evidence-depth layout. After rebuilding an installed unpacked extension, click **Reload** in `chrome://extensions` to activate its new UI, worker and icons. Your saved connection and sessions remain in Chrome storage.
 
 ## Components
 

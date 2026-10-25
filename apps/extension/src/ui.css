@@ -2322,3 +2322,348 @@ h3 {
 .app-surface {
   display: contents;
 }
+
+/* Reading-first map: a quiet guide with deliberate visual hierarchy. */
+.mapview {
+  position: relative;
+}
+.map-layout-control {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 8;
+  display: flex;
+  gap: 2px;
+  background: var(--burrow-2);
+  border: 1px solid var(--chamber-line);
+  padding: 3px;
+  border-radius: var(--r-control);
+}
+.map-layout-control .btn {
+  background: transparent;
+  border-color: transparent;
+  color: var(--burrow-ink-2);
+  font-size: var(--t-xs);
+  min-height: 28px;
+}
+.map-layout-control .btn[aria-pressed="true"] {
+  background: var(--chamber);
+  color: var(--chamber-ink);
+}
+.map-hint {
+  top: 62px;
+  max-width: 75%;
+  white-space: normal;
+  text-align: center;
+}
+.chamber {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+  padding: 12px 16px;
+  white-space: normal;
+  text-align: left;
+  overflow: hidden;
+}
+.chamber strong {
+  font-size: var(--t-base);
+  font-weight: 550;
+  line-height: 1.25;
+}
+.chamber.is-root {
+  border: 1.5px solid var(--tunnel-lit);
+  background: var(--chamber);
+}
+.chamber.is-root strong {
+  font-size: var(--t-lg);
+  font-weight: 620;
+}
+.chamber .root-label {
+  order: -1;
+  color: var(--tunnel-lit);
+  font-size: var(--t-xs);
+}
+.chamber ul {
+  padding-left: 16px;
+  margin: 0;
+  color: var(--chamber-ink);
+  font-size: var(--t-xs);
+  line-height: 1.4;
+}
+.chamber li {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.chamber.detail-idea strong {
+  font-size: var(--t-sm);
+  font-weight: 450;
+}
+.trail-layout .chamber {
+  padding: 0 12px;
+}
+.trail-layout .chamber strong {
+  white-space: nowrap;
+}
+.idea-explanation {
+  font-size: var(--t-base);
+  line-height: 1.65;
+}
+.takeaways {
+  padding-left: 19px;
+  line-height: 1.6;
+}
+.takeaways li + li {
+  margin-top: 9px;
+}
+.idea-example {
+  background: var(--surface-sunk);
+  padding: 12px 14px;
+  border-radius: var(--r-control);
+  margin: 18px 0;
+}
+.idea-example h3 {
+  margin-top: 0;
+}
+.idea-example small,
+.legacy-note {
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+.reading-guide {
+  text-align: left;
+}
+.reading-guide p {
+  font-size: var(--t-base);
+  line-height: 1.65;
+}
+.reading-route {
+  padding-left: 22px;
+}
+.reading-route button {
+  background: none;
+  border: 0;
+  padding: 9px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  color: var(--violet-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.map-help {
+  margin-top: 24px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+.map-help summary {
+  cursor: pointer;
+  font-size: var(--t-sm);
+}
+.choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0;
+  list-style: none;
+}
+.choices li {
+  display: flex;
+  min-width: 0;
+}
+.choice {
+  min-height: 128px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  text-align: left;
+  gap: 16px;
+  padding: 18px;
+  line-height: 1.5;
+  height: 100%;
+}
+.choice .key {
+  flex-shrink: 0;
+}
+.choice-reasons {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+  margin: 20px 0;
+}
+.choice-reasons p {
+  display: grid;
+  gap: 5px;
+  font-size: var(--t-sm);
+  line-height: 1.6;
+}
+.match-board {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin: 24px 0;
+}
+.match-board h3 {
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.match-tile {
+  width: 100%;
+  min-height: 96px;
+  text-align: left;
+  padding: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  margin-bottom: 10px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.match-tile.selected {
+  border-color: var(--violet);
+  background: var(--violet-soft);
+}
+.match-tile small {
+  color: var(--ink-2);
+  font-size: var(--t-xs);
+}
+.match-tile.right {
+  border-color: var(--moss);
+  background: var(--moss-soft);
+}
+.match-tile.wrong {
+  border-color: var(--ember);
+  background: var(--ember-soft);
+}
+.match-tile:disabled {
+  cursor: default;
+}
+.match-solutions {
+  margin: 20px 0;
+}
+.match-solutions div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.match-solutions dt {
+  font-weight: 550;
+}
+.match-solutions dd {
+  margin: 0;
+}
+@media (max-width: 480px) {
+  .choices {
+    gap: 8px;
+  }
+  .choice {
+    padding: 12px;
+    min-height: 140px;
+    font-size: var(--t-sm);
+  }
+  .match-board {
+    gap: 10px;
+  }
+  .match-tile {
+    padding: 10px;
+    font-size: var(--t-sm);
+  }
+  .map-layout-control {
+    top: 8px;
+    left: 8px;
+  }
+}
+.ws.rail-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+.ws.rail-collapsed .rail {
+  display: none;
+}
+.ws.rail-collapsed .topbar .brand {
+  width: auto;
+  margin-right: 20px;
+}
+.map-scope {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.map-scope .btn {
+  font-size: var(--t-xs);
+  min-height: 28px;
+  background: var(--burrow-2);
+  border-color: var(--chamber-line);
+  color: var(--chamber-ink);
+}
+.map-scope span {
+  position: absolute;
+  right: 0;
+  top: 38px;
+  font-size: var(--t-xs);
+  color: var(--burrow-ink-2);
+  white-space: nowrap;
+}
+.branch-count {
+  color: var(--tunnel-lit);
+  font-size: var(--t-xs);
+}
+@media (max-width: 1180px) {
+  .rail-toggle {
+    display: none;
+  }
+}
+@media (max-width: 700px) {
+  .map-scope {
+    top: auto;
+    bottom: 16px;
+    right: 12px;
+  }
+  .map-scope span {
+    top: -22px;
+  }
+  .map-scope .btn {
+    font-size: var(--t-xs);
+    padding: 0 7px;
+  }
+}
+/* Labels remain readable when the overview is fitted to the canvas. */
+.chamber strong {
+  font-size: var(--t-lg);
+}
+.chamber.is-root strong {
+  font-size: var(--t-xl);
+}
+.chamber.is-root ul {
+  font-size: var(--t-base);
+}
+.chamber.detail-idea strong {
+  font-size: var(--t-md);
+}
+.edge-label {
+  font-size: var(--t-sm);
+  line-height: 1.3;
+  max-width: 180px;
+  white-space: normal;
+  text-align: center;
+}
+.trail-layout .chamber strong {
+  font-size: var(--t-base);
+}

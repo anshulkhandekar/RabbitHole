@@ -36,6 +36,15 @@ await build({
   },
   bundle: true,
   outdir: "dist/extension",
+  loader: { ".css": "text" },
+  define: {
+    __RABBIT_TOKENS__: JSON.stringify(
+      (await readFile("apps/extension/src/styles/tokens.css", "utf8")).replace(
+        /@import url\("https:\/\/fonts\.googleapis[^"]+"\);/,
+        "",
+      ),
+    ),
+  },
   format: "iife",
   target: "chrome120",
   minify: true,
