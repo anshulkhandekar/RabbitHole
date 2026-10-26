@@ -151,6 +151,12 @@ export class Store {
     };
   }
   save(owner: string, input: unknown) {
+    return this.analyze(owner, input, true);
+  }
+  validate(owner: string, input: unknown) {
+    return this.analyze(owner, input, false);
+  }
+  private analyze(owner: string, input: unknown, commit: boolean) {
     const p = AnalysisInput.parse(input);
     return this.db.transaction(() => {
       const s = this.get(owner, p.sessionId);
@@ -169,8 +175,12 @@ export class Store {
         !unique(p.processedCaptureIds)
       )
         throw new DomainError(422, "Duplicate IDs");
-      if (p.processedCaptureIds.some((id) => !captures.has(id)))
-        throw new DomainError(422, "Unknown processed capture ID");
+      const unknown = p.processedCaptureIds.filter((id) => !captures.has(id));
+      if (unknown.length)
+        throw new DomainError(
+          422,
+          `Unknown processed capture IDs: ${unknown.join(", ")}. Retrieve GetSession again and copy the exact IDs; do not reconstruct or guess them.`,
+        );
       const processed = new Set([...s.processed, ...p.processedCaptureIds]);
       if (
         p.overview &&
@@ -253,6 +263,8 @@ export class Store {
           422,
           "Rebuild requires an existing saved analysis",
         );
+      if (!commit)
+        return { valid: true, expectedVersion: s.version, sessionId: s.id };
       const oldOrder = new Map(
         s.analysis?.concepts.map((c, i) => [c.id, i]) ?? [],
       );

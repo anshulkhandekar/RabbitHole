@@ -38,6 +38,7 @@ const Excerpts = z
   .max(3)
   .optional();
 export const Concept = z.object({
+  main: z.boolean().optional(),
   id: Id,
   label: z.string().min(1).max(90),
   explanation: z.string().min(1).max(1800),
@@ -63,6 +64,7 @@ export const Edge = z.object({
 export const Study = z
   .object({
     id: Id,
+    concept: Id.optional(),
     type: z.enum(["connection", "flashcard", "quiz", "matching"]),
     prompt: z.string().min(1).max(600),
     answer: z.string().min(1).max(1800),
@@ -77,6 +79,7 @@ export const Study = z
     pairs: z
       .array(
         z.object({
+          concept: Id.optional(),
           left: z.string().min(1).max(180),
           right: z.string().min(1).max(400),
         }),
@@ -120,6 +123,12 @@ export const Study = z
       });
   });
 export const AnalysisInput = z.object({
+  summary: z.string().max(1600).optional(),
+  takeaways: z
+    .array(z.object({ text: z.string().max(400), concept: Id.optional() }))
+    .max(5)
+    .optional(),
+  route: z.array(Id).max(40).optional(),
   sessionId: Id,
   expectedVersion: z.number().int().min(0),
   title: z.string().min(1).max(140),
@@ -143,6 +152,7 @@ export type Prefs = z.infer<typeof Preferences>;
 export type Session = {
   id: string;
   title: string;
+  short?: string;
   status: "active" | "paused" | "finished";
   createdAt: string;
   updatedAt: string;

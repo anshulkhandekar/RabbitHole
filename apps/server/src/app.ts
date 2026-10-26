@@ -89,6 +89,7 @@ export function createApp(
           JSON.stringify({
             event: "tool_validation_failed",
             kind: e instanceof DomainError ? e.status : 422,
+            detail: e instanceof DomainError ? e.message : undefined,
           }),
         );
         return {
@@ -132,7 +133,7 @@ export function createApp(
       "SaveSessionAnalysis",
       {
         description:
-          "Replace the complete analysis atomically, merging prior concepts and preserving stable IDs. Only processedCaptureIds from retrieved pending batches. Optional overview, hierarchy, examples and exact evidence excerpts build a learning guide. Ordinary no-new-content runs must not save. An explicitly requested rebuild may use intent rebuild and processedCaptureIds [] after retrieving existing evidence. Validate quotations and matching pairs. Requires user confirmation.",
+          "First pass the identical payload to ValidateSessionAnalysis and correct its errors before requesting approval here. Replace the complete analysis atomically, preserving stable IDs. Only processedCaptureIds copied exactly from retrieved batches. An explicit rebuild may use intent rebuild and processedCaptureIds []. Requires user confirmation. Never repeat an unchanged failed save; report the error if correction is not possible.",
         inputSchema: AnalysisInput.shape,
         annotations: {
           readOnlyHint: false,
@@ -141,6 +142,16 @@ export function createApp(
         },
       },
       (p) => run(() => store.save(owner, p)),
+    );
+    server.registerTool(
+      "ValidateSessionAnalysis",
+      {
+        description:
+          "Read-only preflight for the complete SaveSessionAnalysis payload. Checks IDs, version, evidence quotations, hierarchy and activities without saving or marking captures processed. Correct errors before requesting write approval. A successful preflight does not reserve the version; Save still rechecks atomically.",
+        inputSchema: AnalysisInput.shape,
+        annotations: { readOnlyHint: true },
+      },
+      (p) => run(() => store.validate(owner, p)),
     );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

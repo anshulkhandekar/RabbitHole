@@ -33,7 +33,12 @@ test("authenticated API and official MCP client complete read → validated writ
     const tools = await client.listTools();
     assert.deepEqual(
       tools.tools.map((t) => t.name),
-      ["ListSessions", "GetSession", "SaveSessionAnalysis"],
+      [
+        "ListSessions",
+        "GetSession",
+        "SaveSessionAnalysis",
+        "ValidateSessionAnalysis",
+      ],
     );
     assert.equal(tools.tools[2].annotations?.readOnlyHint, false);
     // Rebuild support must be discoverable, not only accepted by direct calls.
@@ -51,6 +56,21 @@ test("authenticated API and official MCP client complete read → validated writ
     });
     const data = JSON.parse((read.content as any)[0].text);
     assert.equal(data.captures[0].id, "c1");
+    assert.equal(tools.tools[3].annotations?.readOnlyHint, true);
+    const invalid = await client.callTool({
+      name: "ValidateSessionAnalysis",
+      arguments: { ...analysis(), processedCaptureIds: ["mistyped-capture"] },
+    });
+    assert.equal(invalid.isError, true);
+    assert.match((invalid.content as any)[0].text, /mistyped-capture/);
+    const checked = await client.callTool({
+      name: "ValidateSessionAnalysis",
+      arguments: analysis(),
+    });
+    assert.equal(checked.isError, undefined);
+    assert.equal(JSON.parse((checked.content as any)[0].text).valid, true);
+    assert.equal(db.get("alice", "s1").version, 0);
+    assert.equal(db.get("alice", "s1").analysis, null);
     const saved = await client.callTool({
       name: "SaveSessionAnalysis",
       arguments: analysis(),
