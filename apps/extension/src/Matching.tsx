@@ -1,150 +1,131 @@
-import React, { useState, useEffect, useRef } from "react";
-import type {
-  AnalysisData,
-  Attempt,
-  Session,
-} from "../../../packages/contracts/src/index";
-import { Button, Chip } from "./components";
-import { Evidence } from "./Trail";
-type Item = AnalysisData["studyItems"][number];
+import React, { useState, useRef, useLayoutEffect, useEffect } from "react";
+import type { StudyItem } from "./practice-model";
 export function Matching({
   item,
-  session,
-  onReview,
-  onToast,
+  onComplete,
 }: {
-  item: Item;
-  session: Session;
-  onReview: (a: Attempt) => Promise<boolean>;
-  onToast: (s: string) => void;
+  item: StudyItem;
+  onComplete: (slips: number, missedConcepts: string[]) => void;
 }) {
   const pairs = item.pairs!,
-    order = pairs.map((_, i) => i).reverse();
-  const [active, setActive] = useState<number | null>(null),
-    [matches, setMatches] = useState<(number | null)[]>(pairs.map(() => null)),
-    [checked, setChecked] = useState(false),
-    [saving, setSaving] = useState(false),
-    [saved, setSaved] = useState(false);
-  const alive = useRef(true);
+    [left, setLeft] = useState<number | null>(null),
+    [right, setRight] = useState<number | null>(null),
+    [locked, setLocked] = useState<number[]>([]),
+    [bad, setBad] = useState<[number, number] | null>(null),
+    [paths, setPaths] = useState<{ d: string; bad: boolean }[]>([]);
+  const slips = useRef(0),
+    missed = useRef(new Set<string>()),
+    board = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
+    if (!bad) return;
+    const timer = setTimeout(() => setBad(null), 600);
+    return () => clearTimeout(timer);
+  }, [bad]);
+  useLayoutEffect(() => {
+    const draw = () => {
+      const el = board.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const point = (side: string, i: number) => {
+        const r = el
+          .querySelector(`[data-${side}="${i}"] .socket`)!
+          .getBoundingClientRect();
+        return [
+          r.left + r.width / 2 - rect.left,
+          r.top + r.height / 2 - rect.top,
+        ];
+      };
+      const curve = (l: number, r: number) => {
+        const [x, y] = point("left", l),
+          [xx, yy] = point("right", r);
+        return `M${x},${y} C${x + 40},${y} ${xx - 40},${yy} ${xx},${yy}`;
+      };
+      setPaths([
+        ...locked.map((i) => ({ d: curve(i, i), bad: false })),
+        ...(bad ? [{ d: curve(bad[0], bad[1]), bad: true }] : []),
+      ]);
     };
-  }, []);
-  const correct = matches.filter((m, i) => m === i).length,
-    complete = matches.every((m) => m !== null);
-  async function check() {
-    if (!complete || saving) return;
-    setChecked(true);
-    setSaving(true);
-    try {
-      const ok = await onReview({
-        id: crypto.randomUUID(),
-        studyId: item.id,
-        analysisVersion: session.version,
-        response: "Matched ideas to meanings",
-        matches: matches as number[],
-        rating: correct === pairs.length ? "understood" : "again",
-        timestamp: new Date().toISOString(),
-      });
-      if (ok && alive.current) {
-        setSaved(true);
-        onToast("Matching result recorded");
+    draw();
+    const observer = new ResizeObserver(draw);
+    if (board.current) observer.observe(board.current);
+    return () => observer.disconnect();
+  }, [locked, bad]);
+  function pick(side: "left" | "right", i: number) {
+    if (locked.includes(i)) return;
+    const l = side === "left" ? i : left,
+      r = side === "right" ? i : right;
+    setLeft(l);
+    setRight(r);
+    if (l === null || r === null) return;
+    if (l === r) {
+      const next = [...locked, l];
+      setLocked(next);
+      requestAnimationFrame(() =>
+        board.current
+          ?.querySelector<HTMLButtonElement>("[data-left]:not(:disabled)")
+          ?.focus(),
+      );
+      if (next.length === pairs.length)
+        onComplete(slips.current, [...missed.current]);
+    } else {
+      slips.current++;
+      for (const n of [l, r]) {
+        const id = pairs[n].concept;
+        if (id) missed.current.add(id);
       }
-    } finally {
-      if (alive.current) setSaving(false);
+      setBad([l, r]);
     }
+    setLeft(null);
+    setRight(null);
   }
   return (
-    <section className="matching">
-      <h2 className="prompt">{item.prompt}</h2>
-      <p className="prompt-sub">
-        Choose an idea, then its meaning. You can change pairs before checking.
-      </p>
-      <div className="match-board">
+    <>
+      <h2 className="run-prompt">{item.prompt}</h2>
+      <p className="q-sub">Pick one on each side. Correct pairs lock in.</p>
+      <div className="match-v2" ref={board}>
+        <svg aria-hidden="true">
+          {paths.map((p, i) => (
+            <path key={i + p.d} d={p.d} className={p.bad ? "bad" : "ok"} />
+          ))}
+        </svg>
         <div>
-          <h3>Ideas</h3>
-          {pairs.map((pair, i) => (
+          <h3>Idea</h3>
+          {pairs.map((p, i) => (
             <button
               key={i}
-              className={`match-tile ${active === i ? "selected" : ""} ${checked ? (matches[i] === i ? "right" : "wrong") : ""}`}
-              aria-label={`Idea: ${pair.left}`}
-              aria-pressed={active === i}
-              disabled={checked}
-              onClick={() => {
-                setActive(i);
-                setMatches((m) => m.map((v, j) => (j === i ? null : v)));
-              }}
+              data-left={i}
+              className={`match-tile-v2 ${locked.includes(i) ? "locked" : ""} ${left === i ? "armed" : ""} ${bad?.[0] === i ? "miss" : ""}`}
+              disabled={locked.includes(i)}
+              aria-pressed={left === i}
+              onClick={() => pick("left", i)}
             >
-              <span>{pair.left}</span>
-              {matches[i] !== null && <small>{pairs[matches[i]!].right}</small>}
+              <span>{p.left}</span>
+              <i className="socket" />
             </button>
           ))}
         </div>
         <div>
-          <h3>Meanings</h3>
-          {order.map((i) => (
-            <button
-              key={i}
-              className="match-tile"
-              aria-label={`Meaning: ${pairs[i].right}`}
-              disabled={checked || active === null || matches.includes(i)}
-              onClick={() => {
-                if (active === null) return;
-                setMatches((m) => m.map((v, j) => (j === active ? i : v)));
-                setActive(null);
-              }}
-            >
-              {pairs[i].right}
-            </button>
-          ))}
+          <h3>What it means</h3>
+          {pairs
+            .map((_, i) => pairs.length - 1 - i)
+            .map((i) => (
+              <button
+                key={i}
+                data-right={i}
+                className={`match-tile-v2 ${locked.includes(i) ? "locked" : ""} ${right === i ? "armed" : ""} ${bad?.[1] === i ? "miss" : ""}`}
+                disabled={locked.includes(i)}
+                aria-pressed={right === i}
+                onClick={() => pick("right", i)}
+              >
+                <i className="socket" />
+                <span>{pairs[i].right}</span>
+              </button>
+            ))}
         </div>
       </div>
-      {!checked ? (
-        <Button primary disabled={!complete} onClick={() => void check()}>
-          Check matches
-        </Button>
-      ) : (
-        <div className="why" role="status">
-          <strong>
-            {correct} of {pairs.length} matched correctly
-          </strong>
-          <p>{item.answer}</p>
-          <dl className="match-solutions">
-            {pairs.map((pair) => (
-              <div key={pair.left}>
-                <dt>{pair.left}</dt>
-                <dd>{pair.right}</dd>
-              </div>
-            ))}
-          </dl>
-          <Chip>Checked against Go’s saved pairs</Chip>
-          <Evidence
-            session={session}
-            ids={item.captureIds}
-            excerpts={item.evidence}
-          />
-          {saved ? (
-            <p>Matching result recorded</p>
-          ) : (
-            <Button disabled={saving} onClick={() => void check()}>
-              {saving ? "Saving result…" : "Retry saving result"}
-            </Button>
-          )}
-          <Button
-            onClick={() => {
-              setMatches(pairs.map(() => null));
-              setChecked(false);
-              setSaved(false);
-              setActive(null);
-            }}
-            disabled={saving}
-          >
-            Try these pairs again
-          </Button>
-        </div>
-      )}
-    </section>
+      <span className="sr-only" role="status">
+        {locked.length} pairs locked. {slips.current} slips.
+      </span>
+    </>
   );
 }

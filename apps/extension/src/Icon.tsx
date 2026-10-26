@@ -1,5 +1,76 @@
 import React from "react";
 const paths = {
+  brief: (
+    <g
+      dangerouslySetInnerHTML={{
+        __html:
+          '<rect x="4" y="3.5" width="12" height="13" rx="2.4"/><path d="M7 7.5h6M7 10.5h6M7 13.5h3.5"/>',
+      }}
+    />
+  ),
+  memory: (
+    <g
+      dangerouslySetInnerHTML={{
+        __html:
+          '<circle cx="10" cy="10" r="6"/><path d="M10 4a6 6 0 0 1 0 12Z" fill="currentColor" stroke="none"/>',
+      }}
+    />
+  ),
+  route: (
+    <g
+      dangerouslySetInnerHTML={{
+        __html:
+          '<circle cx="5.5" cy="14.5" r="1.8"/><circle cx="14.5" cy="5.5" r="1.8"/><path d="M7.3 14.5H12a2.5 2.5 0 0 0 0-5H8a2.5 2.5 0 0 1 0-5h4.7"/>',
+      }}
+    />
+  ),
+  quiz: (
+    <g
+      dangerouslySetInnerHTML={{
+        __html:
+          '<rect x="3.5" y="4" width="13" height="12" rx="2.4"/><path d="m7 10.2 2 2 4-4.4"/>',
+      }}
+    />
+  ),
+  match: (
+    <g
+      dangerouslySetInnerHTML={{
+        __html:
+          '<circle cx="5" cy="6" r="1.8"/><circle cx="15" cy="14" r="1.8"/><circle cx="5" cy="14" r="1.8"/><circle cx="15" cy="6" r="1.8"/><path d="M6.8 6.6 13.2 13.4M6.8 13.4l6.4-6.8"/>',
+      }}
+    />
+  ),
+  cards: (
+    <g
+      dangerouslySetInnerHTML={{
+        __html:
+          '<rect x="6" y="5.5" width="10" height="11.5" rx="2"/><path d="M4 13.5V5.2A2.2 2.2 0 0 1 6.2 3h7"/>',
+      }}
+    />
+  ),
+  link: (
+    <g
+      dangerouslySetInnerHTML={{
+        __html:
+          '<path d="M8.5 11.5l3-3"/><path d="M9 6.5l1.2-1.2a3 3 0 0 1 4.3 4.3L13.3 10.8M10.8 13.3l-1.1 1.2a3 3 0 0 1-4.3-4.3L6.7 9"/>',
+      }}
+    />
+  ),
+  bolt: (
+    <g
+      dangerouslySetInnerHTML={{
+        __html: '<path d="M11 3 5 11h4.5L9 17l6-8h-4.5Z"/>',
+      }}
+    />
+  ),
+  moon: (
+    <g
+      dangerouslySetInnerHTML={{
+        __html: '<path d="M15.5 12.2A6 6 0 0 1 7.8 4.5a6 6 0 1 0 7.7 7.7Z"/>',
+      }}
+    />
+  ),
+
   logo: (
     <>
       <g transform="scale(.3125)" strokeWidth="5">

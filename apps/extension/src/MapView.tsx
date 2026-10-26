@@ -1,399 +1,640 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useCallback,
+} from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
   Handle,
   Position,
   BaseEdge,
-  EdgeLabelRenderer,
   useViewport,
   useReactFlow,
   ViewportPortal,
   MarkerType,
+  useNodesInitialized,
+  useNodesState,
   type Node,
   type Edge,
 } from "@xyflow/react";
 import type { Session } from "../../../packages/contracts/src/index";
 import {
-  depthLayout,
-  radialLayout,
-  radialTunnelPath,
-  radialVisibleIds,
-  tunnelPath,
-  sourceVerb,
-  domain,
-  type ChamberPosition,
-} from "./ui-model";
-import { Icon } from "./Icon";
-import { Button, IconButton, Chip } from "./components";
-import { Evidence } from "./Trail";
+  edgeCrossings,
+  mergeEdges,
+  layoutIdeas,
+  cachedLayoutIdeas,
+  connectionGeometry,
+  placeLabels,
+  type IdeaPosition,
+} from "./map-layout";
+import { deriveMemory } from "./practice-model";
+import { routeIds } from "./summary-model";
+import { IdeaDrawer } from "./IdeaDrawer";
+import { sourceVerb, domain } from "./ui-model";
+import { Button, IconButton } from "./components";
 export type Selection = { kind: "concept" | "edge"; id: string } | null;
-function Chamber({ data }: any) {
+const duration = () =>
+  matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 480;
+function IdeaNode({ data }: any) {
   return (
     <div
-      className={`chamber ${data.isRoot ? "is-root" : data.row === 1 ? "major-idea" : "detail-idea"} ${data.selected ? "selected" : ""} ${data.neighbor ? "neighbor" : ""} ${data.dim ? "dim" : ""}`}
+      className={`idea-card ${data.main ? "main" : ""} ${data.selected ? "selected" : ""} ${data.dim ? "dim" : ""} ${data.neighbor ? "neighbor" : ""} ${data.match ? "match" : ""} ${data.visited ? "visited" : ""} ${data.memory ? "memory-" + data.memory : ""} ${data.ready ? "ready" : ""} ${data.bump ? "bump" : ""}`}
       style={{ "--row": data.row } as React.CSSProperties}
     >
+      {data.memory && <i className="memory-dot" />}
       <Handle type="target" position={Position.Top} />
-      <strong>{data.label}</strong>
-      {data.isRoot && (
-        <small className="root-label">
-          {data.authored ? "Main idea" : "Layout hub"}
-        </small>
-      )}
-      {data.isRoot && data.takeaways?.length > 0 && (
-        <ul>
-          {data.takeaways.slice(0, 2).map((point: string) => (
-            <li key={point}>{point}</li>
-          ))}
-        </ul>
-      )}
-      {!data.isRoot && data.detailCount > 0 && (
-        <small className="branch-count">{data.detailCount} details</small>
-      )}
-      {data.gap && <span className="gapdot" title="A gap in your trail" />}
+      {data.main && <small>Main idea</small>}
+      <span>{data.label}</span>
+      {data.gap && <i className="gapdot" />}
       <Handle type="source" position={Position.Bottom} />
     </div>
   );
 }
-function Tunnel({ id, data, markerEnd }: any) {
-  const { zoom } = useViewport();
-  const route = data.radial
-    ? radialTunnelPath(data.a, data.b, data.lane)
-    : tunnelPath(data.a, data.b, data.adjacent, data.lane);
-  const labelRoute = data.radial
-    ? radialTunnelPath(data.a, data.b, data.lane / Math.min(1, zoom))
-    : tunnelPath(data.a, data.b, data.adjacent, data.lane / Math.min(1, zoom));
+function Connection({ id, data, markerEnd, markerStart }: any) {
+  const group = useRef<SVGGElement>(null);
+  const coordinates = (String(data.path).match(/-?\d+(?:\.\d+)?/g) ?? []).map(
+      Number,
+    ),
+    xs = coordinates.filter((_, i) => i % 2 === 0),
+    ys = coordinates.filter((_, i) => i % 2 === 1);
+  const bounds = {
+    x: Math.min(...xs) - 16,
+    y: Math.min(...ys) - 16,
+    width: Math.max(...xs) - Math.min(...xs) + 32,
+    height: Math.max(...ys) - Math.min(...ys) + 32,
+  };
+  useLayoutEffect(() => {
+    const path = group.current?.querySelector<SVGPathElement>(
+      ".react-flow__edge-path",
+    );
+    if (path)
+      group.current?.style.setProperty(
+        "--edge-length",
+        String(path.getTotalLength()),
+      );
+  }, [data.path]);
   return (
     <g
-      className={`edge ${data.lit ? "lit" : ""} ${data.dim ? "dim" : ""}`}
-      style={
-        { "--row": Math.max(data.a.row, data.b.row) } as React.CSSProperties
-      }
+      ref={group}
+      className={`map-connection ${data.inferred ? "is-inferred" : ""} ${data.lit ? "lit" : ""} ${data.dim ? "dim" : ""}`}
     >
+      {data.gaps?.length > 0 && (
+        <defs>
+          <mask id={`map-gap-${id}`} maskUnits="userSpaceOnUse" {...bounds}>
+            <rect {...bounds} fill="white" />
+            {data.gaps.map((p: { x: number; y: number }, i: number) => (
+              <circle key={i} cx={p.x} cy={p.y} r={6} fill="black" />
+            ))}
+          </mask>
+        </defs>
+      )}
       <BaseEdge
+        mask={data.gaps?.length ? `url(#map-gap-${id})` : undefined}
         id={id}
-        path={route.path}
+        path={data.path}
         markerEnd={markerEnd}
-        interactionWidth={20}
-        className={`tunnel ${data.inferred ? "inferred" : ""}`}
+        markerStart={markerStart}
+        interactionWidth={18}
+        style={{
+          stroke: data.lit ? "var(--edge-lit)" : "var(--edge)",
+          strokeWidth: data.lit ? 2 : 1.6,
+          strokeDasharray: data.inferred ? "5 5" : undefined,
+        }}
       />
-      <EdgeLabelRenderer>
-        <div
-          className={`edge-label nodrag nopan ${data.lit ? "visible" : ""}`}
-          style={{
-            transform: `translate(${labelRoute.labelX}px,${labelRoute.labelY}px) scale(${1 / zoom}) translate(-50%, -50%)`,
-          }}
-        >
-          {data.label}
-        </div>
-      </EdgeLabelRenderer>
+      <path data-label-path={id} d={data.path} fill="none" stroke="none" />
     </g>
   );
 }
-const nodeTypes = { chamber: Chamber },
-  edgeTypes = { tunnel: Tunnel };
-function Ruler({ rows }: { rows: ReturnType<typeof depthLayout>["rows"] }) {
-  const viewport = useViewport();
+const nodeTypes = { idea: IdeaNode },
+  edgeTypes = { connection: Connection };
+function Labels({ edges, nodes }: { edges: Edge[]; nodes: IdeaPosition[] }) {
+  const host = useRef<HTMLDivElement>(null),
+    [positions, setPositions] = useState<ReturnType<typeof placeLabels>>([]);
+  const visible = edges.filter((e) => e.data?.lit);
+  const signature = visible.map((e) => e.id + e.data?.path).join("|");
+  useLayoutEffect(() => {
+    const labels = visible
+      .map((e) => {
+        const path = [
+            ...document.querySelectorAll<SVGPathElement>("[data-label-path]"),
+          ].find((p) => p.dataset.labelPath === e.id),
+          el = host.current?.querySelector<HTMLElement>(
+            `[data-label="${e.id}"]`,
+          );
+        if (!path || !el) return null;
+        const p = path.getPointAtLength(path.getTotalLength() / 2);
+        return {
+          id: e.id,
+          x: p.x,
+          y: p.y + (e.data?.under ? 26 : 0),
+          width: el.offsetWidth,
+          height: el.offsetHeight,
+        };
+      })
+      .filter((v): v is NonNullable<typeof v> => !!v);
+    setPositions(placeLabels(labels, nodes));
+  }, [signature, nodes]);
   return (
-    <>
-      <ViewportPortal>
-        <svg className="depth-guides">
-          {rows.map((r, i) => (
-            <line key={i} x1={-5000} x2={5000} y1={r.y + 23} y2={r.y + 23} />
-          ))}
-        </svg>
-      </ViewportPortal>
-      <div className="ruler" aria-label="Depth in your research trail">
-        {rows.map((r, i) => (
-          <div key={i} style={{ top: viewport.y + (r.y + 23) * viewport.zoom }}>
-            <b>{r.depth ? `Depth ${r.depth}` : "Evidence missing"}</b>
-            {r.capture &&
-              (r.capture.sourceType === "search"
-                ? `Searched “${r.capture.text}”`
-                : r.capture.sourceType === "highlight"
-                  ? "Highlighted a passage"
-                  : `${sourceVerb(r.capture)} ${domain(r.capture.url)}`)}
-          </div>
-        ))}
+    <ViewportPortal>
+      <div ref={host} className="world-labels">
+        {visible.map((e) => {
+          const p = positions.find((x) => x.id === e.id);
+          return (
+            <div
+              key={e.id}
+              data-label={e.id}
+              className="world-label"
+              style={{
+                left: p?.x ?? 0,
+                top: p?.y ?? 0,
+                visibility: p ? "visible" : "hidden",
+              }}
+            >
+              {String(e.data?.label)}
+            </div>
+          );
+        })}
       </div>
-    </>
+    </ViewportPortal>
   );
 }
-function MapTools({ layout }: { layout: ReturnType<typeof depthLayout> }) {
-  const flow = useReactFlow();
-  const fit = () => {
-    const bounds = flow.getNodesBounds(flow.getNodes());
-    const el = document.querySelector<HTMLElement>(".burrow");
-    if (!el || !layout.nodes.length) return;
-    const left = el.classList.contains("radial")
-        ? 36
-        : el.clientWidth > 500
-          ? 150
-          : 112,
-      right = 24;
-    const zoom = Math.max(
-      0.12,
-      Math.min(
-        (el.clientWidth - left - right) / Math.max(bounds.width, 1),
-        (el.clientHeight - 150) / Math.max(bounds.height + 80, 1),
-        1.25,
-      ),
-    );
-    void flow.setViewport({
-      x:
-        left +
-        (el.clientWidth - left - right - bounds.width * zoom) / 2 -
-        bounds.x * zoom,
-      y: el.clientHeight / 2 - (bounds.y + bounds.height / 2) * zoom + 20,
-      zoom,
-    });
-  };
-  const fitRef = useRef(fit);
-  fitRef.current = fit;
-  useEffect(() => {
-    const el = document.querySelector<HTMLElement>(".burrow");
-    if (!el) return;
-    let frame = 0;
-    const observer = new ResizeObserver(() => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => fitRef.current());
-    });
-    observer.observe(el);
-    frame = requestAnimationFrame(() => fitRef.current());
-    return () => {
-      observer.disconnect();
-      cancelAnimationFrame(frame);
-    };
-  }, [layout.nodes.map((n) => `${n.id}:${n.y}`).join(",")]);
+function Ruler({
+  rows,
+}: {
+  rows: Awaited<ReturnType<typeof layoutIdeas>>["rows"];
+}) {
+  const v = useViewport();
   return (
-    <div className="map-tools">
-      <IconButton name="plus" label="Zoom in" onClick={() => flow.zoomIn()} />
-      <IconButton
-        name="minus"
-        label="Zoom out"
-        onClick={() => flow.zoomOut()}
-      />
-      <IconButton name="fit" label="Fit to view" onClick={fit} />
+    <div className="depth-ruler">
+      {rows.map((r, i) => (
+        <div key={i} style={{ top: v.y + r.y * v.zoom }}>
+          <b>{r.depth ? `Depth ${r.depth}` : "Evidence missing"}</b>
+          <span>
+            {r.capture
+              ? `${sourceVerb(r.capture)} ${domain(r.capture.url)}`
+              : "Go inferred"}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
 function Canvas({
-  mode,
   session,
   selected,
   onSelect,
+  memory,
+  setMemory,
+  walk,
+  setWalk,
+  onPractice,
+  brighten,
 }: {
-  mode?: "radial" | "trail";
+  brighten?: string[];
   session: Session;
   selected: Selection;
   onSelect: (s: Selection) => void;
+  memory: boolean;
+  setMemory: (v: boolean) => void;
+  walk: number | null;
+  setWalk: (v: number | null) => void;
+  onPractice: (id: string) => void;
 }) {
   const analysis = session.analysis!,
-    [hover, setHover] = useState<string | null>(null),
-    [all, setAll] = useState(false),
-    fullLayout = useMemo(
-      () =>
-        mode === "trail"
-          ? depthLayout(analysis.concepts, session.captures)
-          : radialLayout(analysis, session.captures),
-      [analysis, session.captures, mode],
+    memories = deriveMemory(analysis, session.attempts),
+    flow = useReactFlow(),
+    initialized = useNodesInitialized();
+  const [measuredNodes, , onNodesChange] = useNodesState<Node>(
+    analysis.concepts.map((c) => ({
+      id: c.id,
+      type: "idea",
+      position: { x: 0, y: 0 },
+      data: {},
+    })),
+  );
+  const measurementKey = measuredNodes
+    .map((n) => `${n.id}:${n.measured?.width}:${n.measured?.height}`)
+    .join("|");
+  const merged = useMemo(() => mergeEdges(analysis.edges), [analysis]);
+  const [query, setQuery] = useState(""),
+    [supported, setSupported] = useState(true),
+    [inferred, setInferred] = useState(true);
+  const search = useRef<HTMLInputElement>(null),
+    route = routeIds(analysis);
+  const [layout, setLayout] = useState<Awaited<
+      ReturnType<typeof layoutIdeas>
+    > | null>(null),
+    [error, setError] = useState(""),
+    [hover, setHover] = useState<Selection>(null);
+  const box = useRef<HTMLDivElement>(null),
+    layoutKey = `${session.id}:${session.version}`;
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() =>
+      setCanvasSize({ width: el.clientWidth, height: el.clientHeight }),
     );
-  const rootId =
-    "rootId" in fullLayout && typeof fullLayout.rootId === "string"
-      ? fullLayout.rootId
-      : undefined;
-  const edgeSelection =
-    selected?.kind === "edge"
-      ? analysis.edges.find((e) => e.id === selected.id)
-      : undefined;
-  const visible = rootId
-    ? radialVisibleIds(
-        fullLayout.nodes,
-        rootId,
-        selected?.kind === "concept"
-          ? selected.id
-          : (edgeSelection?.source ?? null),
-        all,
-      )
-    : fullLayout.nodes.map((n) => n.id);
-  // A selected cross-branch relationship must retain both endpoints.
-  if (edgeSelection)
-    for (const id of [edgeSelection.source, edgeSelection.target])
-      if (!visible.includes(id)) visible.push(id);
-  const layout = {
-    ...fullLayout,
-    nodes: fullLayout.nodes.filter((n) => visible.includes(n.id)),
-  };
-  const focus = hover ?? (selected?.kind === "concept" ? selected.id : null),
-    focusedEdge =
-      selected?.kind === "edge"
-        ? analysis.edges.find((e) => e.id === selected.id)
-        : undefined;
-  const litEdges = new Set(
-    analysis.edges
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const fit = useCallback(() => {
+    if (!box.current) return;
+    const bounds = flow.getNodesBounds(flow.getNodes()),
+      w = box.current.clientWidth,
+      h = box.current.clientHeight;
+    const zoom = Math.max(
+      0.9,
+      Math.min(
+        1.25,
+        (w - 174) / Math.max(1, bounds.width),
+        (h - 140) / Math.max(1, bounds.height),
+      ),
+    );
+    void flow.fitView({ minZoom: 0.7, maxZoom: zoom, padding: 0.2 });
+    void flow.setViewport(
+      {
+        x:
+          150 -
+          bounds.x * zoom +
+          Math.max(0, (w - 174 - bounds.width * zoom) / 2),
+        y: 64 - bounds.y * zoom,
+        zoom,
+      },
+      { duration: duration() },
+    );
+  }, [flow]);
+  useEffect(() => {
+    setLayout(null);
+    setError("");
+  }, [layoutKey]);
+  useEffect(() => {
+    if (!initialized || layout) return;
+    let alive = true;
+    document.fonts.ready.then(async () => {
+      const measured = flow.getNodes();
+      if (measured.some((n) => !n.measured?.width || !n.measured?.height))
+        return;
+      try {
+        const result = await cachedLayoutIdeas(
+          layoutKey,
+          analysis,
+          session.captures,
+          new Map(
+            measured.map((n) => [
+              n.id,
+              { width: n.measured!.width!, height: n.measured!.height! },
+            ]),
+          ),
+        );
+        if (alive) setLayout(result);
+      } catch (e) {
+        if (alive) setError(String(e));
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [initialized, layoutKey, !!layout, measurementKey]);
+  useEffect(() => {
+    if (layout && !selected && walk === null) {
+      const id = requestAnimationFrame(fit);
+      return () => cancelAnimationFrame(id);
+    }
+  }, [layout, fit, canvasSize]);
+  useEffect(() => {
+    if (!layout) return;
+    const id =
+        walk !== null
+          ? route[walk]
+          : selected?.kind === "concept"
+            ? selected.id
+            : undefined,
+      p = layout.nodes.find((n) => n.id === id);
+    if (p && box.current) {
+      const zoom = Math.max(1, flow.getZoom()),
+        w = box.current.clientWidth,
+        h = box.current.clientHeight;
+      const centerX = selected ? (w < 900 ? w / 2 : (w - 372) / 2) : w / 2;
+      const centerY =
+        selected && w < 900 ? h * 0.22 : walk !== null ? h * 0.3 : h / 2;
+      void flow.setViewport(
+        {
+          x: centerX - (p.x + p.width / 2) * zoom,
+          y: centerY - (p.y + p.height / 2) * zoom,
+          zoom,
+        },
+        { duration: duration() },
+      );
+    }
+  }, [selected?.id, walk, layout, canvasSize]);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      const typing = (e.target as HTMLElement).matches(
+        "input,textarea,[contenteditable=true]",
+      );
+      if (typing) return;
+      if (e.key === "/") {
+        e.preventDefault();
+        search.current?.focus();
+      }
+      if (e.key === "Escape") {
+        setWalk(null);
+        onSelect(null);
+      }
+      if (walk !== null && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        e.preventDefault();
+        if (e.key === "ArrowRight" && walk === route.length - 1) {
+          onPractice("route:" + route.join(","));
+          return;
+        }
+        setWalk(
+          Math.max(
+            0,
+            Math.min(
+              route.length - 1,
+              walk + (e.key === "ArrowRight" ? 1 : -1),
+            ),
+          ),
+        );
+      }
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [walk, route.join(",")]);
+  const focused = hover ?? selected,
+    focusId = focused?.kind === "concept" ? focused.id : null;
+  const lit = new Set(
+    merged
       .filter((e) =>
-        focus
-          ? e.source === focus || e.target === focus
-          : e.id === focusedEdge?.id,
+        focusId
+          ? e.source === focusId || e.target === focusId
+          : focused?.kind === "edge" && e.ids.includes(focused.id),
       )
       .map((e) => e.id),
   );
   const neighbors = new Set(
-    analysis.edges
-      .filter((e) => litEdges.has(e.id))
-      .flatMap((e) => [e.source, e.target]),
+    merged.filter((e) => lit.has(e.id)).flatMap((e) => [e.source, e.target]),
   );
-  const active = !!(focus || focusedEdge);
-  const nodes: Node[] = layout.nodes.map((p) => {
-    const c = analysis.concepts.find((c) => c.id === p.id)!;
-    const height = "height" in p ? (p.height as number) : 46,
-      isRoot = "isRoot" in p && p.isRoot;
+  const nodes: Node[] = analysis.concepts.map((c) => {
+    const p = layout?.nodes.find((n) => n.id === c.id);
     return {
+      ...measuredNodes.find((n) => n.id === c.id),
       id: c.id,
-      type: "chamber",
-      position: { x: p.x, y: p.y },
-      width: p.width,
-      height,
-      style: { width: p.width, height },
+      type: "idea",
+      position: { x: p?.x ?? 0, y: p?.y ?? 0 },
+      style: { opacity: layout ? 1 : 0 },
       data: {
+        ready: !!layout,
+        bump: !!layout && brighten?.includes(c.id),
+        memory: memory ? memories[c.id] : null,
         label: c.label,
-        isRoot,
-        authored: !!analysis.overview,
-        takeaways: isRoot ? analysis.overview?.takeaways : undefined,
-        detailCount:
-          "parentId" in p
-            ? fullLayout.nodes.filter(
-                (n) => "parentId" in n && n.parentId === p.id,
-              ).length
-            : 0,
+        main: c.main ?? c.id === analysis.overview?.rootConceptId,
         gap: c.gap,
-        row: p.row,
-        selected: selected?.id === c.id,
+        row: p?.row ?? 0,
+        selected: selected?.id === c.id || route[walk ?? -1] === c.id,
+        visited:
+          walk !== null &&
+          route.indexOf(c.id) >= 0 &&
+          route.indexOf(c.id) < walk,
         neighbor: neighbors.has(c.id),
-        dim: active && !neighbors.has(c.id) && c.id !== focus,
+        dim: query
+          ? !c.label.toLowerCase().includes(query.toLowerCase())
+          : !!focused && !neighbors.has(c.id) && c.id !== focusId,
+        match: !!query && c.label.toLowerCase().includes(query.toLowerCase()),
       },
       ariaLabel: c.label,
+      ariaRole: "button",
       focusable: true,
-      selected: selected?.id === c.id,
     };
   });
-  const edges: Edge[] = analysis.edges
-    .filter((e) => visible.includes(e.source) && visible.includes(e.target))
-    .map((e) => {
-      const a = layout.nodes.find((n) => n.id === e.source)!,
-        b = layout.nodes.find((n) => n.id === e.target)!,
-        row = layout.nodes.filter((n) => n.row === a.row),
-        adjacent =
-          Math.abs(
-            row.findIndex((n) => n.id === a.id) -
-              row.findIndex((n) => n.id === b.id),
-          ) === 1;
-      const parallel = analysis.edges.filter(
-        (other) =>
-          (other.source === e.source && other.target === e.target) ||
-          (other.source === e.target && other.target === e.source),
-      );
-      const lane =
-        (parallel.findIndex((other) => other.id === e.id) -
-          (parallel.length - 1) / 2) *
-        30;
-      return {
-        id: e.id,
-        source: e.source,
-        target: e.target,
-        type: "tunnel",
-        ariaLabel: `${analysis.concepts.find((c) => c.id === e.source)?.label} ${e.label} ${analysis.concepts.find((c) => c.id === e.target)?.label}`,
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: litEdges.has(e.id) ? "var(--tunnel-lit)" : "var(--tunnel)",
-        },
-        data: {
-          a,
-          b,
-          lane,
-          adjacent,
-          radial: mode !== "trail",
-          label: e.label,
-          inferred: e.evidenceKind !== "supported",
-          lit: litEdges.has(e.id),
-          dim: active && !litEdges.has(e.id),
-        },
-      };
-    });
+  const edges: Edge[] = layout
+    ? merged
+        .filter((e) => (e.evidenceKind === "supported" ? supported : inferred))
+        .filter(
+          (e) =>
+            layout.nodes.some((n) => n.id === e.source) &&
+            layout.nodes.some((n) => n.id === e.target),
+        )
+        .map((e) => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          type: "connection",
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 12,
+            height: 12,
+            color: lit.has(e.id) ? "var(--edge-lit)" : "var(--edge)",
+          },
+          markerStart: e.twoWay
+            ? {
+                type: MarkerType.ArrowClosed,
+                width: 12,
+                height: 12,
+                color: "var(--edge)",
+              }
+            : undefined,
+          data: {
+            ...connectionGeometry(e, layout.nodes, merged),
+            label: e.label,
+            lit: lit.has(e.id),
+            dim: !!focused && !lit.has(e.id),
+            inferred: e.evidenceKind !== "supported",
+          },
+        }))
+    : [];
+  const routeSignature = edges.map((e) => e.id + e.data?.path).join("|");
+  const crossings = useMemo(
+    () =>
+      edgeCrossings(
+        edges.map((e) => ({ id: e.id, path: String(e.data?.path) })),
+      ),
+    [routeSignature],
+  );
+  for (const e of edges) if (e.data) e.data.gaps = crossings.get(e.id);
   return (
     <div
-      className={`burrow ${mode !== "trail" ? "radial" : "trail-layout"}`}
-      key={`${session.id}:${session.version}`}
+      className="map-canvas"
+      ref={box}
       onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          onSelect(null);
-          setHover(null);
-        }
-        if (e.key === "Enter" || e.key === " ") {
-          const node = (e.target as HTMLElement).closest<HTMLElement>(
-            ".react-flow__node",
-          );
-          if (node?.dataset.id) {
-            e.preventDefault();
-            onSelect({ kind: "concept", id: node.dataset.id });
-          }
+        if (e.key !== "Enter" && e.key !== " ") return;
+        const node = (e.target as HTMLElement).closest<HTMLElement>(
+          ".react-flow__node[data-id]",
+        );
+        if (node) {
+          e.preventDefault();
+          onSelect({ kind: "concept", id: node.dataset.id! });
         }
       }}
     >
       <ReactFlow
+        onNodesChange={onNodesChange}
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         nodesDraggable={false}
         nodesConnectable={false}
-        minZoom={0.12}
+        minZoom={0.7}
         maxZoom={2.5}
-        onNodeClick={(_, n) => onSelect({ kind: "concept", id: n.id })}
-        onNodeMouseEnter={(_, n) => setHover(n.id)}
+        panOnScroll
+        zoomOnPinch
+        zoomOnScroll={false}
+        attributionPosition="top-left"
+        onNodeClick={(_, n) => {
+          if (walk !== null && route.includes(n.id))
+            setWalk(route.indexOf(n.id));
+          else onSelect({ kind: "concept", id: n.id });
+        }}
+        onNodeMouseEnter={(_, n) => setHover({ kind: "concept", id: n.id })}
         onNodeMouseLeave={() => setHover(null)}
+        onEdgeMouseEnter={(_, e) => setHover({ kind: "edge", id: e.id })}
+        onEdgeMouseLeave={() => setHover(null)}
         onEdgeClick={(_, e) => onSelect({ kind: "edge", id: e.id })}
         onPaneClick={() => onSelect(null)}
       >
-        {mode === "trail" && <Ruler rows={layout.rows} />}
-        <MapTools layout={layout} />
-        {mode !== "trail" && (
-          <div className="map-scope">
-            <Button
-              onClick={() => {
-                setAll(false);
-                onSelect(null);
-              }}
-              aria-label="Return to map overview"
-            >
-              Overview
-            </Button>
-            <Button aria-pressed={all} onClick={() => setAll((v) => !v)}>
-              {all ? "Focus on branches" : "Show all ideas"}
-            </Button>
-            <span>
-              {layout.nodes.length} of {fullLayout.nodes.length} ideas
-            </span>
-          </div>
+        <div className="map-search">
+          <input
+            ref={search}
+            aria-label="Find an idea"
+            placeholder="Find an idea"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setQuery("");
+                e.currentTarget.blur();
+              }
+              if (e.key === "Enter") {
+                const c = analysis.concepts.find((c) =>
+                  c.label.toLowerCase().includes(query.toLowerCase()),
+                );
+                if (c) onSelect({ kind: "concept", id: c.id });
+              }
+            }}
+          />
+          <kbd>/</kbd>
+        </div>
+        <div
+          className={`map-layers ${selected ? "shifted" : ""}`}
+          aria-label="Map layers"
+        >
+          <button
+            aria-pressed={supported}
+            onClick={() => setSupported(!supported)}
+          >
+            — From your trail
+          </button>
+          <button
+            aria-pressed={inferred}
+            onClick={() => setInferred(!inferred)}
+          >
+            ┄ Go inferred
+          </button>
+          <button aria-pressed={memory} onClick={() => setMemory(!memory)}>
+            ◐ What I remember
+          </button>
+        </div>
+        {walk === null ? (
+          <Button
+            className={`map-walk ${selected ? "shifted" : ""}`}
+            onClick={() => {
+              onSelect(null);
+              setWalk(0);
+            }}
+            disabled={!route.length}
+          >
+            Walk the route
+          </Button>
+        ) : (
+          <section className="route-tour">
+            <div className="tour-top">
+              <div className="tour-steps">
+                {route.map((id, i) => (
+                  <i
+                    key={id}
+                    className={i === walk ? "current" : i < walk ? "done" : ""}
+                  />
+                ))}
+              </div>
+              <span>
+                {walk + 1} of {route.length}
+              </span>
+              <IconButton
+                name="x"
+                label="End walk"
+                onClick={() => setWalk(null)}
+              />
+            </div>
+            <h3>
+              {analysis.concepts.find((c) => c.id === route[walk])?.label}
+            </h3>
+            {walk > 0 &&
+              (() => {
+                const e = analysis.edges.find(
+                  (e) =>
+                    (e.source === route[walk - 1] &&
+                      e.target === route[walk]) ||
+                    (e.target === route[walk - 1] && e.source === route[walk]),
+                );
+                return e ? (
+                  <p className="tour-via">
+                    {analysis.concepts.find((c) => c.id === e.source)?.label}{" "}
+                    <b>{e.label}</b>{" "}
+                    {analysis.concepts.find((c) => c.id === e.target)?.label}
+                  </p>
+                ) : null;
+              })()}
+            <p>
+              {analysis.concepts.find((c) => c.id === route[walk])?.explanation}
+            </p>
+            <div className="tour-actions">
+              <Button disabled={walk === 0} onClick={() => setWalk(walk - 1)}>
+                Back
+              </Button>
+              <Button
+                primary
+                onClick={() =>
+                  walk === route.length - 1
+                    ? onPractice("route:" + route.join(","))
+                    : setWalk(walk + 1)
+                }
+              >
+                {walk === route.length - 1
+                  ? "Practice these ideas"
+                  : "Next idea"}
+              </Button>
+            </div>
+          </section>
         )}
-        <div className="map-hint">
-          {mode === "trail"
-            ? "Lower on the map means deeper in your trail"
-            : analysis.overview
-              ? "Start at the main idea. Follow a branch to explore the details."
-              : "Grouped from saved connections. Select an idea to retrace its evidence."}
+        {layout && (
+          <>
+            <Ruler rows={layout.rows} />
+            <Labels nodes={layout.nodes} edges={edges} />
+          </>
+        )}
+        <div className="map-zoom">
+          <IconButton
+            name="plus"
+            label="Zoom in"
+            onClick={() => flow.zoomIn()}
+          />
+          <IconButton
+            name="minus"
+            label="Zoom out"
+            onClick={() => flow.zoomOut()}
+          />
+          <IconButton name="fit" label="Fit to view" onClick={fit} />
         </div>
-        <div className="legend">
-          <span>
-            <i />
-            From your trail
-          </span>
-          <span>
-            <i className="inferred" />
-            Go inferred
-          </span>
-        </div>
+        <span className="map-count">
+          {nodes.length} ideas · {merged.length} connections
+        </span>
+        {error && <div role="alert">Map layout failed: {error}</div>}
       </ReactFlow>
     </div>
   );
@@ -405,356 +646,77 @@ export function MapView({
   onSelect,
   onPractice,
   onRebuild,
+  mapRequest,
 }: {
   session: Session;
   list: boolean;
   selected: Selection;
   onSelect: (s: Selection) => void;
-  onPractice: (edgeId: string) => void;
+  onPractice: (id: string) => void;
   onRebuild: () => void;
+  mapRequest?: { memory?: boolean; walk?: boolean; brighten?: string[] };
 }) {
-  const [mode, setMode] = useState<"radial" | "trail">("radial");
-  const analysis = session.analysis;
-  if (!analysis)
+  const [memory, setMemory] = useState(mapRequest?.memory ?? false),
+    [walk, setWalk] = useState<number | null>(mapRequest?.walk ? 0 : null);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onSelect(null);
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [onSelect]);
+  if (!session.analysis)
     return (
-      <section className="empty map-empty">
-        <Icon name="map" size={36} />
-        <h2>Your trail comes first</h2>
-        <p>
-          {session.captures.length
-            ? "Send your finds to Go to discover their connections. Your saved sources are ready in the trail."
-            : "Browse a question on an included tab. Searches and readable pages appear in your trail."}
-        </p>
-        <p>
-          Select a passage and press Alt+Shift+H to keep something important.
-        </p>
+      <section className="empty">
+        <h2>Your map starts with your trail</h2>
+        <p>Send your saved finds to Go to build an evidence-linked map.</p>
+        <Button onClick={onRebuild}>Build with Go</Button>
       </section>
     );
-  const layout = depthLayout(analysis.concepts, session.captures),
-    concept =
-      selected?.kind === "concept"
-        ? analysis.concepts.find((c) => c.id === selected.id)
-        : undefined,
-    edge =
-      selected?.kind === "edge"
-        ? analysis.edges.find((e) => e.id === selected.id)
-        : undefined;
-  const label = (id: string) =>
-    analysis.concepts.find((c) => c.id === id)?.label ?? id;
-  if (list)
-    return (
-      <section className="clist">
-        <div className="clist-inner">
-          {analysis.concepts.map((c) => (
-            <article className="clist-row" key={c.id}>
+  return (
+    <div className="map-v2">
+      {list ? (
+        <section className="idea-list">
+          {session.analysis.concepts.map((c) => (
+            <article key={c.id}>
               <button
-                className="concept-list-title"
-                onClick={() => onSelect({ kind: "concept", id: c.id })}
+                onClick={() => {
+                  onSelect({ kind: "concept", id: c.id });
+                }}
               >
                 {c.label}
               </button>
               <p>{c.explanation}</p>
-              <ul>
-                {analysis.edges
-                  .filter((e) => e.source === c.id)
-                  .map((e) => (
-                    <li key={e.id}>
-                      <Button
-                        quiet
-                        onClick={() => onSelect({ kind: "edge", id: e.id })}
-                      >
-                        {e.label} {label(e.target)}
-                        <Chip>
-                          {e.evidenceKind === "supported"
-                            ? "From your trail"
-                            : e.evidenceKind === "supplemental"
-                              ? "Go added context"
-                              : "Go inferred"}
-                        </Chip>
-                      </Button>
-                    </li>
-                  ))}
-              </ul>
-              {selected?.id === c.id && (
-                <Evidence session={session} ids={c.captureIds} />
-              )}
             </article>
           ))}
-          {edge && (
-            <Inspector
-              session={session}
-              selected={selected}
-              onSelect={onSelect}
-              onPractice={onPractice}
-              onRebuild={onRebuild}
-            />
-          )}
-        </div>
-      </section>
-    );
-
-  return (
-    <div className="mapview">
-      <div className="map-layout-control" role="group" aria-label="Map layout">
-        <Button
-          aria-pressed={mode === "radial"}
-          onClick={() => setMode("radial")}
-        >
-          Radial map
-        </Button>
-        <Button
-          aria-pressed={mode === "trail"}
-          onClick={() => setMode("trail")}
-        >
-          Trail depth
-        </Button>
-      </div>
-      <ReactFlowProvider>
-        <Canvas
-          mode={mode}
-          session={session}
-          selected={selected}
-          onSelect={onSelect}
-        />
-      </ReactFlowProvider>
-      <Inspector
+        </section>
+      ) : (
+        <ReactFlowProvider>
+          <Canvas
+            key={`${session.id}:${session.version}`}
+            session={session}
+            selected={selected}
+            onSelect={onSelect}
+            memory={memory}
+            setMemory={setMemory}
+            walk={walk}
+            setWalk={setWalk}
+            onPractice={onPractice}
+            brighten={mapRequest?.brighten}
+          />
+        </ReactFlowProvider>
+      )}
+      <IdeaDrawer
         session={session}
         selected={selected}
         onSelect={onSelect}
-        onPractice={onPractice}
-        onRebuild={onRebuild}
+        onPractice={(ids, edge) => onPractice(edge ?? ids[0])}
+        onWalk={(id) => {
+          onSelect(null);
+          const route = routeIds(session.analysis!);
+          setWalk(Math.max(0, route.indexOf(id)));
+        }}
       />
     </div>
-  );
-}
-
-function Inspector({
-  session,
-  selected,
-  onSelect,
-  onPractice,
-  onRebuild,
-}: {
-  session: Session;
-  selected: Selection;
-  onSelect: (s: Selection) => void;
-  onPractice: (id: string) => void;
-  onRebuild: () => void;
-}) {
-  const analysis = session.analysis!,
-    layout = depthLayout(analysis.concepts, session.captures),
-    concept =
-      selected?.kind === "concept"
-        ? analysis.concepts.find((c) => c.id === selected.id)
-        : undefined,
-    edge =
-      selected?.kind === "edge"
-        ? analysis.edges.find((e) => e.id === selected.id)
-        : undefined;
-  const label = (id: string) =>
-    analysis.concepts.find((c) => c.id === id)?.label ?? id;
-  return (
-    <aside className="inspector" aria-label="Idea and connection details">
-      {concept || edge ? (
-        <div className="insp">
-          <IconButton
-            name="x"
-            label="Clear selection"
-            onClick={() => onSelect(null)}
-          />
-          <div className="insp-kicker">
-            <Chip kind="violet">{concept ? "Idea" : "Connection"}</Chip>
-            {concept ? (
-              <Chip>
-                Found at{" "}
-                {layout.nodes.find((n) => n.id === concept.id)?.depth
-                  ? `depth ${layout.nodes.find((n) => n.id === concept.id)?.depth}`
-                  : "an unknown depth"}
-              </Chip>
-            ) : (
-              <Chip kind={edge!.evidenceKind === "supported" ? "done" : ""}>
-                {edge!.evidenceKind === "supported"
-                  ? "From your trail"
-                  : edge!.evidenceKind === "supplemental"
-                    ? "Go added context"
-                    : "Go inferred"}
-              </Chip>
-            )}
-          </div>
-          {concept ? (
-            <h2>{concept.label}</h2>
-          ) : (
-            <div className="pair">
-              <button
-                className="pill"
-                onClick={() => onSelect({ kind: "concept", id: edge!.source })}
-              >
-                {label(edge!.source)}
-              </button>
-              <span className="via">{edge!.label}</span>
-              <button
-                className="pill"
-                onClick={() => onSelect({ kind: "concept", id: edge!.target })}
-              >
-                {label(edge!.target)}
-              </button>
-            </div>
-          )}
-          <div className="idea-explanation">
-            {(concept?.explanation ?? edge?.explanation)
-              ?.split("\n")
-              .filter(Boolean)
-              .map((p, i) => (
-                <p key={i}>{p}</p>
-              ))}
-          </div>
-          {concept?.takeaways?.length ? (
-            <>
-              <h3>What matters</h3>
-              <ul className="takeaways">
-                {concept.takeaways.map((t) => (
-                  <li key={t}>{t}</li>
-                ))}
-              </ul>
-            </>
-          ) : null}
-          {(concept?.example || edge?.example) && (
-            <section className="idea-example">
-              <h3>A concrete example</h3>
-              <p>{concept?.example ?? edge?.example}</p>
-              <small>
-                Go’s illustration; check the cited evidence for source claims.
-              </small>
-            </section>
-          )}
-          {concept?.boundary && (
-            <>
-              <h3>Where this stops applying</h3>
-              <p>{concept.boundary}</p>
-            </>
-          )}
-          {!concept?.takeaways && !edge?.example && (
-            <p className="legacy-note">
-              This saved map has brief explanations.{" "}
-              <button className="text-button" onClick={onRebuild}>
-                Rebuild with Go
-              </button>{" "}
-              for a fuller guide from these sources.
-            </p>
-          )}
-          <h3>Where you read it</h3>
-          <Evidence
-            session={session}
-            ids={(concept ?? edge)!.captureIds}
-            excerpts={(concept ?? edge)!.evidence}
-          />
-          {concept && (
-            <>
-              <h3>Connections</h3>
-              <ul className="links">
-                {analysis!.edges
-                  .filter(
-                    (e) => e.source === concept.id || e.target === concept.id,
-                  )
-                  .map((e) => (
-                    <li key={e.id}>
-                      <button
-                        onClick={() => onSelect({ kind: "edge", id: e.id })}
-                      >
-                        <span>
-                          <b>{label(e.source)}</b> {e.label}{" "}
-                          <b>{label(e.target)}</b>
-                        </span>
-                        <Icon name="chevronRight" size={14} />
-                      </button>
-                    </li>
-                  ))}
-              </ul>
-              {concept.gap && (
-                <div className="gap">
-                  <strong>A gap in your trail</strong>
-                  {concept.gap}
-                </div>
-              )}
-            </>
-          )}
-          {edge && (
-            <div className="insp-actions">
-              <Button
-                primary
-                icon="practice"
-                onClick={() => onPractice(edge.id)}
-              >
-                Quiz this connection
-              </Button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="insp-empty reading-guide">
-          {analysis.overview ? (
-            <>
-              <Chip kind="violet">Start here</Chip>
-              <h2>{label(analysis.overview.rootConceptId)}</h2>
-              <p>{analysis.overview.summary}</p>
-              <h3>The main takeaways</h3>
-              <ul className="takeaways">
-                {analysis.overview.takeaways.map((t) => (
-                  <li key={t}>{t}</li>
-                ))}
-              </ul>
-              <h3>A route through your research</h3>
-              <ol className="reading-route">
-                {analysis.overview.route.map((id) => (
-                  <li key={id}>
-                    <button onClick={() => onSelect({ kind: "concept", id })}>
-                      {label(id)}
-                      <Icon name="chevronRight" size={14} />
-                    </button>
-                  </li>
-                ))}
-              </ol>
-              <Button icon="practice" onClick={() => onPractice("")}>
-                Test your understanding
-              </Button>
-            </>
-          ) : (
-            <>
-              <h2>
-                Start with{" "}
-                {label(radialLayout(analysis, session.captures).rootId)}
-              </h2>
-              <p>
-                This older map was grouped from its saved connections. Rebuild
-                it to add a main idea, examples and a reading route.
-              </p>
-              <Button onClick={onRebuild} icon="handoff">
-                Rebuild map with Go
-              </Button>
-            </>
-          )}
-          <details className="map-help">
-            <summary>How to explore this map</summary>
-            <h2>Pick an idea or a tunnel to see why it’s there</h2>
-            <p>
-              Every idea links back to what you read. Dashed tunnels are
-              connections your trail doesn’t show directly.
-            </p>
-            <div className="insp-stats">
-              <span>
-                <b>{analysis!.concepts.length}</b>ideas
-              </span>
-              <span>
-                <b>{analysis!.edges.length}</b>connections
-              </span>
-              <span>
-                <b>{analysis!.concepts.filter((c) => c.gap).length}</b>gaps to
-                fill
-              </span>
-            </div>
-          </details>
-        </div>
-      )}
-    </aside>
   );
 }

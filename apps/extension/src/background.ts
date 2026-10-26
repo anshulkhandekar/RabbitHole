@@ -3,16 +3,21 @@ import {
   Capture,
   type Session,
 } from "../../../packages/contracts/src/index";
+import type { Handoff } from "./handoff";
+import { googleQuery } from "./google";
 type Local = {
   sessions: Record<string, Session>;
   active?: string;
   tabs: Record<string, string>;
   lastCapture: Record<string, string>;
+  searchSession?: string;
   excluded: Record<string, string[]>;
   queue: { id: string; method: string; path: string; body?: unknown }[];
   config: { backend: string; token: string; agentUrl: string };
   error?: string;
   readingMode?: boolean;
+  handoffs?: Record<string, Handoff>;
+  widgetPosition?: { x: number; y: number };
 };
 const initial: Local = {
   sessions: {},
@@ -31,10 +36,18 @@ const load = async (): Promise<Local> => {
     Partial<Local> | undefined;
   const state: Local = { ...initial, ...local };
   const bindings = (await chrome.storage.session.get("bindings")).bindings as
-    | { tabs: Record<string, string>; lastCapture: Record<string, string> }
+    | {
+        tabs: Record<string, string>;
+        lastCapture: Record<string, string>;
+        searchSession?: string;
+      }
     | undefined;
   state.tabs = bindings?.tabs ?? {};
   state.lastCapture = bindings?.lastCapture ?? {};
+  state.searchSession = bindings?.searchSession;
+  for (const handoff of Object.values(state.handoffs ?? {}))
+    if (Date.now() - Date.parse(handoff.startedAt) > 10 * 60_000)
+      handoff.status = "stalled";
   // Session storage survives worker suspension but is cleared by a browser restart.
   // Never trust persisted tab IDs after restart, even if onStartup was not delivered.
   if (!bindings) {
@@ -63,11 +76,38 @@ const persist = async (s: Local) => {
     state: { ...s, tabs: {}, lastCapture: {} },
   });
   await chrome.storage.session.set({
-    bindings: { tabs: s.tabs, lastCapture: s.lastCapture },
+    bindings: {
+      tabs: s.tabs,
+      lastCapture: s.lastCapture,
+      searchSession: s.searchSession,
+    },
   });
 };
 const enqueue = (s: Local, method: string, path: string, body?: unknown) =>
   s.queue.push({ id: crypto.randomUUID(), method, path, body });
+function startContext(tab?: chrome.tabs.Tab) {
+  const regular = !tab?.incognito && /^https?:/.test(tab?.url ?? "");
+  const url = tab?.url ? new URL(tab.url) : undefined;
+  const workspace =
+    !tab?.incognito &&
+    url?.href.split(/[?#]/)[0] === chrome.runtime.getURL("index.html") &&
+    url?.searchParams.has("workspace");
+  return { regular, canStart: !!tab?.id && (regular || !!workspace) };
+}
+function enrollSearch(s: Local, tab?: chrome.tabs.Tab) {
+  const session = s.active ? s.sessions[s.active] : undefined;
+  if (
+    tab?.id !== undefined &&
+    tab.active &&
+    !tab.incognito &&
+    session?.status === "active" &&
+    s.searchSession === session.id &&
+    /^https?:/.test(tab.url ?? "") &&
+    googleQuery(tab.url!) &&
+    !s.excluded[session.id]?.includes(tab.url!)
+  )
+    s.tabs[tab.id] = session.id;
+}
 async function flush(s: Local) {
   if (!s.config.token) {
     s.error =
@@ -161,8 +201,9 @@ let chain = Promise.resolve();
 function transact(fn: (s: Local) => Promise<unknown>) {
   const work = chain.then(async () => {
     const s = await load();
+    const before = JSON.stringify(s);
     const result = await fn(s);
-    await persist(s);
+    if (JSON.stringify(s) !== before) await persist(s);
     return result;
   });
   chain = work.then(
@@ -175,6 +216,13 @@ chrome.alarms.onAlarm.addListener(
   () =>
     void transact(async (s) => {
       await flush(s);
+      return Object.keys(s.handoffs ?? {}).length > 0;
+    }).then((waiting) => {
+      if (waiting)
+        return handle(
+          { type: "refresh" },
+          { id: chrome.runtime.id, url: chrome.runtime.getURL("") },
+        );
     }),
 );
 chrome.tabs.onCreated.addListener((tab) => {
@@ -246,10 +294,13 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
     if (msg.type === "reading-context") {
       const id = sender.tab?.id,
         session = s.active ? s.sessions[s.active] : undefined;
+      if ((sender.frameId ?? 0) === 0 && sender.url === sender.tab?.url)
+        enrollSearch(s, sender.tab);
       if (
         id === undefined ||
         sender.tab?.incognito ||
-        s.tabs[id] !== session?.id ||
+        !/^https?:/.test(sender.tab?.url ?? "") ||
+        (sender.frameId ?? 0) !== 0 ||
         !session ||
         s.excluded[session.id]?.includes(sender.tab!.url ?? "")
       )
@@ -257,10 +308,36 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       return {
         id: session.id,
         status: session.status,
-        settings: session.settings,
-        excluded: s.excluded[session.id] ?? [],
+        settings:
+          s.tabs[id] === session.id
+            ? session.settings
+            : { articleCapture: false, autoHighlights: false },
+        excluded:
+          s.tabs[id] === session.id ? (s.excluded[session.id] ?? []) : [],
         readingMode: s.readingMode ?? false,
+        included: s.tabs[id] === session.id,
+        widgetPosition: s.widgetPosition,
+        theme: (await chrome.storage.local.get("uiTheme")).uiTheme,
+        handoff: s.handoffs?.[session.id]?.status,
+        syncError: !!s.error,
       };
+    }
+    if (msg.type === "reading-position") {
+      const p = msg.position;
+      if (
+        (!internal &&
+          (sender.tab?.incognito ||
+            !/^https?:/.test(sender.tab?.url ?? "") ||
+            (sender.frameId ?? 0) !== 0)) ||
+        !p ||
+        ![p.x, p.y].every(
+          (v) =>
+            typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1,
+        )
+      )
+        throw new Error("Invalid widget position");
+      s.widgetPosition = { x: p.x, y: p.y };
+      return { saved: true };
     }
     if (msg.type === "reading-control") {
       const id = sender.tab?.id,
@@ -269,7 +346,8 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
         id === undefined ||
         sender.tab?.incognito ||
         !session ||
-        s.tabs[id] !== session.id
+        !/^https?:/.test(sender.tab?.url ?? "") ||
+        (sender.frameId ?? 0) !== 0
       )
         throw new Error("This page is not in the active session");
       if (msg.control === "hide") s.readingMode = false;
@@ -316,11 +394,12 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
         active: true,
         lastFocusedWindow: true,
       });
+      if (tab) enrollSearch(s, { ...tab, active: true });
       return {
         tabId: tab?.id,
         url: tab?.url ?? "",
         title: tab?.title ?? "",
-        regular: !tab?.incognito && /^https?:/.test(tab?.url ?? ""),
+        ...startContext(tab),
         included: tab?.id !== undefined && s.tabs[tab.id] === s.active,
         count: Object.values(s.tabs).filter((id) => id === s.active).length,
         excluded:
@@ -357,6 +436,35 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       return s;
     }
     if (msg.type === "state") return s;
+    if (msg.type === "handoff" || msg.type === "handoff-cancel") {
+      const session = s.sessions[msg.id];
+      if (!session) throw new Error("Unknown session");
+      s.handoffs ??= {};
+      if (msg.type === "handoff-cancel") delete s.handoffs[msg.id];
+      else {
+        if (typeof msg.prompt !== "string" || msg.prompt.length > 20_000)
+          throw new Error("Invalid handoff prompt");
+        const previous = s.handoffs[msg.id];
+        s.handoffs[msg.id] = {
+          sessionId: msg.id,
+          prompt: msg.prompt,
+          copied: !!msg.copied,
+          opened: !!msg.opened,
+          version: previous?.version ?? session.version,
+          captureIds:
+            previous?.captureIds ??
+            (msg.intent === "rebuild"
+              ? []
+              : session.captures
+                  .filter((c) => !session.processed.includes(c.id))
+                  .slice(0, 24)
+                  .map((c) => c.id)),
+          startedAt: previous?.startedAt ?? new Date().toISOString(),
+          status: previous?.status ?? "waiting",
+        };
+      }
+      return s;
+    }
     if (msg.type === "config") {
       const url = new URL(msg.config.backend);
       if (
@@ -381,9 +489,10 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
         active: true,
         lastFocusedWindow: true,
       });
-      if (!tab?.id || tab.incognito || !/^https?:/.test(tab.url ?? ""))
+      const context = startContext(tab);
+      if (!context.canStart || sender.tab?.incognito)
         throw new Error("Open a regular research webpage first");
-      if (s.active && s.sessions[s.active]) {
+      if (s.active && s.sessions[s.active]?.status === "active") {
         s.sessions[s.active].status = "paused";
         enqueue(s, "PATCH", `/api/sessions/${s.active}`, { status: "paused" });
       }
@@ -391,7 +500,10 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       const id = crypto.randomUUID();
       const session: Session = {
         id,
-        title: "New rabbit hole",
+        title:
+          String(msg.title ?? "")
+            .trim()
+            .slice(0, 140) || "New rabbit hole",
         status: "active",
         createdAt: now,
         updatedAt: now,
@@ -404,7 +516,9 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       };
       s.sessions[id] = session;
       s.active = id;
-      s.tabs[tab.id] = id;
+      s.searchSession = id;
+      s.readingMode = true;
+      if (context.regular) s.tabs[tab!.id!] = id;
       enqueue(s, "POST", "/api/sessions", {
         id,
         title: session.title,
@@ -412,10 +526,11 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       });
       await persist(s);
       await register();
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: ["content.js"],
-      });
+      if (context.regular)
+        await chrome.scripting.executeScript({
+          target: { tabId: tab!.id! },
+          files: ["content.js"],
+        });
     }
     if (msg.type === "include") {
       const [tab] = await chrome.tabs.query({
@@ -430,6 +545,7 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       )
         throw new Error("Open a research webpage first");
       s.tabs[tab.id] = s.active;
+      s.searchSession = s.active;
       await persist(s);
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
@@ -535,6 +651,13 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
             );
           }
           s.sessions[remote.id] = remote;
+          const handoff = s.handoffs?.[remote.id];
+          if (
+            handoff &&
+            remote.version > handoff.version &&
+            handoff.captureIds.every((id) => remote.processed.includes(id))
+          )
+            delete s.handoffs![remote.id];
         }
         s.error = undefined;
       } catch (e) {
@@ -576,7 +699,39 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       info.menuItemId === "save-confusing" ? "confusing" : "important",
     );
 });
-chrome.commands.onCommand.addListener(() => {
+chrome.commands.onCommand.addListener((command, tab) => {
+  if (command === "open-workspace") {
+    void chrome.tabs.create({
+      url: chrome.runtime.getURL("index.html?workspace=1#map"),
+    });
+    return;
+  }
+  if (command === "open-panel") {
+    if (tab?.windowId !== undefined)
+      void chrome.sidePanel.open({ windowId: tab.windowId });
+    return;
+  }
+  if (command === "toggle-indicator") {
+    void transact(async (s) => {
+      s.readingMode = !s.readingMode;
+      if (
+        tab?.id !== undefined &&
+        !tab.incognito &&
+        /^https?:/.test(tab.url ?? "")
+      ) {
+        await persist(s);
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ["content.js"],
+        });
+        await chrome.tabs
+          .sendMessage(tab.id, { type: "reading-update" })
+          .catch(() => {});
+      }
+    });
+    return;
+  }
+  if (command !== "save-highlight") return;
   void chrome.tabs
     .query({ active: true, lastFocusedWindow: true })
     .then(([tab]) => {

@@ -500,25 +500,28 @@ try {
   store.save("test", fixture);
   await ui.bringToFront();
   await ui.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  await ui.getByRole("tab", { name: "Summary", exact: true }).click();
   await ui.getByRole("heading", { name: fixture.title, exact: true }).waitFor();
   await ui.getByRole("button", { name: "Dismiss", exact: true }).click();
-  console.log("CHECK select chamber");
-  await ui.locator('.react-flow__node[data-id="n1"]').focus();
-  await ui.keyboard.press("Space");
+  await ui.getByRole("tab", { name: "Map", exact: true }).click();
+  await expect(ui.locator(".react-flow__node")).toHaveCount(6);
+  await ui.locator('.react-flow__node[data-id="n1"]').click();
   await ui.getByRole("heading", { name: "GPU", exact: true }).waitFor();
-  await ui.getByText("Where you read it", { exact: true }).waitFor();
+  await ui
+    .getByRole("heading", { name: "Why it’s on your map", exact: true })
+    .waitFor();
   assert.ok(
     (
       await ui
-        .locator(".quoted-text")
+        .locator(".idea-drawer .quoted-text")
         .first()
         .evaluate((el) => getComputedStyle(el).fontFamily)
     ).includes("Literata"),
   );
-  // Regression: background writes must not replace the inspector and collapse native details.
-  const sourceDetails = ui.locator(".inspector .source-quote details").first();
+  const sourceDetails = ui
+    .locator(".idea-drawer .source-quote details")
+    .first();
   await sourceDetails.locator("summary").click();
-  await expect(sourceDetails).toHaveAttribute("open", "");
   await ui.evaluate(async (id) => {
     const s = await chrome.runtime.sendMessage({ type: "state" });
     await chrome.runtime.sendMessage({
@@ -533,187 +536,77 @@ try {
     });
     await chrome.runtime.sendMessage({ type: "refresh" });
   }, sessionId);
-  await ui.waitForTimeout(200); // Let the storage-change render settle before checking retention.
   await expect(sourceDetails).toHaveAttribute("open", "");
-  console.log("CHECK check lit labels");
-  await expect(ui.locator(".edge-label.visible")).toHaveCount(4);
-  assert.equal(await ui.locator(".tunnel.inferred").count(), 1);
-  await ui.getByRole("button", { name: "Trail depth", exact: true }).click();
-  await ui.getByText("Depth 3", { exact: true }).waitFor();
-  await ui.getByRole("button", { name: "Radial map", exact: true }).click();
-  await ui.emulateMedia({
-    colorScheme: "light",
-    reducedMotion: "no-preference",
-  });
-  assert.equal(
-    await ui
-      .locator(".burrow")
-      .evaluate(
-        (el) =>
-          el
-            .getAnimations({ subtree: true })
-            .filter((a) => a.playState === "running").length,
-      ),
-    0,
-    "The map must be static, including with motion enabled",
-  );
-  await ui.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
-  await ui.locator('.react-flow__node[data-id="n1"]').focus();
+  await expect(ui.locator(".world-label")).not.toHaveCount(0);
   await ui.keyboard.press("Escape");
-  await expect(ui.locator(".edge-label.visible")).toHaveCount(0);
-  await expect(ui.locator(".react-flow__node")).toHaveCount(4);
-  await ui.locator('.react-flow__node[data-id="n3"]').focus();
-  await ui.keyboard.press("Enter");
-  await expect(ui.locator('.react-flow__node[data-id="n5"]')).toBeVisible();
-  await expect(ui.locator('.react-flow__node[data-id="n4"]')).toHaveCount(0);
-  await ui
-    .getByRole("button", { name: "Return to map overview", exact: true })
-    .click();
-  await expect(ui.locator(".react-flow__node")).toHaveCount(4);
-  await ui.getByRole("button", { name: "Show all ideas", exact: true }).click();
-  await expect(ui.locator(".react-flow__node")).toHaveCount(6);
-  await ui
-    .getByRole("button", { name: "Focus on branches", exact: true })
-    .click();
-  await ui.getByRole("button", { name: "List view", exact: true }).click();
-  await ui.getByRole("button", { name: "GPU", exact: true }).click();
-  await ui.getByRole("button", { name: "Map view", exact: true }).click();
-  console.log("CHECK check responsive inspector");
+  await expect(ui.locator(".idea-drawer")).toHaveCount(0);
   await ui.setViewportSize({ width: 880, height: 800 });
-  assert.equal(await ui.locator(".rail").isVisible(), false);
-  const burrowBox = await ui.locator(".burrow").boundingBox(),
-    inspectorBox = await ui.locator(".inspector").boundingBox();
-  assert.ok(inspectorBox!.y >= burrowBox!.y + burrowBox!.height - 1);
+  await ui.locator('.react-flow__node[data-id="n1"]').click();
+  const canvasBox = await ui.locator(".map-canvas").boundingBox(),
+    drawerBox = await ui.locator(".idea-drawer").boundingBox();
+  assert.ok(
+    drawerBox!.y > canvasBox!.y && drawerBox!.width > 600,
+    "Drawer becomes a bottom sheet below 900px",
+  );
   await ui.setViewportSize({ width: 1280, height: 800 });
-  console.log("CHECK wait for toast");
-  await ui.waitForFunction(() => !document.querySelector(".toast.show"));
-  await ui.screenshot({ path: "test-results/workspace.png", fullPage: true });
-  await ui.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
-  await ui.screenshot({
-    path: "test-results/workspace-dark.png",
-    fullPage: true,
-  });
-  await ui.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
-  await ui
-    .getByRole("button", { name: "GPU uses Parallel execution", exact: true })
-    .click();
-  await ui
-    .getByRole("button", { name: "Quiz this connection", exact: true })
-    .click();
-  await expect(
-    ui.getByRole("tab", { name: "Quiz", exact: true }),
-  ).toHaveAttribute("aria-selected", "true");
-  await ui
-    .getByRole("tab", { name: "Explain the connection", exact: true })
-    .click();
+  await ui.keyboard.press("Escape");
+  for (const colorScheme of ["light", "dark"] as const) {
+    await ui.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+    await ui.screenshot({
+      path: `test-results/workspace-${colorScheme}.png`,
+      fullPage: true,
+    });
+  }
+  await ui.getByRole("tab", { name: "Practice", exact: true }).click();
+  await ui.getByRole("button", { name: /^Explain the connection/ }).click();
   await ui
     .getByLabel("Your explanation")
     .fill("It runs independent operations at once.");
   await ui
     .getByRole("button", { name: "Reveal explanation", exact: true })
     .click();
-  console.log("CHECK practice partial");
-  reviewGate = new Promise<void>((resolve) => {
-    releaseReview = resolve;
-  });
-  const reviewRequest = new Promise<void>((resolve) => {
-    reviewStarted = resolve;
-  });
-  await ui.getByRole("button", { name: "Partly", exact: true }).click();
-  await Promise.race([
-    reviewRequest,
-    new Promise((_, reject) =>
-      setTimeout(
-        () => reject(new Error("Review request did not reach the backend")),
-        15000,
-      ),
-    ),
-  ]);
-  await ui.getByRole("tab", { name: "Flashcards", exact: true }).click();
-  releaseReview!();
-  await ui.getByRole("button", { name: "Flip card", exact: true }).waitFor();
-  assert.equal(
-    await ui.getByRole("button", { name: "Got it", exact: true }).isEnabled(),
-    false,
-  );
+  await ui.getByRole("button", { name: /^Partly/ }).click();
+  await expect.poll(() => store.get("test", sessionId).attempts.length).toBe(1);
   await ui
-    .getByRole("button", { name: "Flip card", exact: true })
-    .press("Space");
-  await ui
-    .getByRole("button", { name: "Got it", exact: true })
-    .waitFor({ state: "visible" });
-  await ui.waitForFunction(
-    () =>
-      !document.querySelector<HTMLButtonElement>(".card-btns .btn-primary")
-        ?.disabled,
-  );
-  assert.equal(
-    await ui
-      .getByRole("button", { name: "Flip card", exact: true })
-      .evaluate((el) => getComputedStyle(el).transform),
-    "none",
-  );
-  reviewGate = undefined;
-  assert.equal(store.get("test", sessionId).attempts[0].rating, "partly");
-  await ui.getByRole("tab", { name: "Quiz", exact: true }).click();
-  await ui
-    .getByRole("button", { name: "B Parallel execution", exact: true })
+    .getByRole("button", { name: "Back to practice", exact: true })
     .click();
-  await ui.getByText("Correct", { exact: true }).waitFor();
+  await ui.getByRole("button", { name: /^Quiz / }).click();
+  await ui.keyboard.press("2");
+  await ui.getByRole("heading", { name: /That’s right/ }).waitFor();
+  await ui.getByRole("button", { name: /^Continue/ }).click();
+  await expect.poll(() => store.get("test", sessionId).attempts.length).toBe(2);
   await ui
-    .locator(".why")
-    .getByText("Answer recorded", { exact: true })
+    .getByRole("button", { name: "Back to practice", exact: true })
+    .click();
+  await ui.getByRole("button", { name: /^Matching / }).click();
+  await ui.locator('[data-left="0"]').click();
+  await ui.locator('[data-right="1"]').click(); // Slip: no pair may lock.
+  await expect(ui.locator(".match-tile-v2.locked")).toHaveCount(0);
+  await ui.locator('[data-left="0"]').click();
+  await ui.locator('[data-right="0"]').click();
+  await expect(ui.locator(".match-tile-v2.locked")).toHaveCount(2);
+  await ui.locator('[data-right="1"]').click();
+  await ui.locator('[data-left="1"]').click();
+  await ui
+    .getByRole("heading", { name: "All matched with 1 slip", exact: true })
     .waitFor();
-  assert.equal(
-    store
-      .get("test", sessionId)
-      .attempts.some((a) => a.studyId === "q1" && a.choice === 1),
-    true,
-  );
-  await ui.screenshot({
-    path: "test-results/reading-quiz.png",
-    fullPage: true,
-  });
-  const choiceBoxes = await ui.locator(".choice").evaluateAll((es) =>
-    es.map((e) => ({
-      x: e.getBoundingClientRect().x,
-      y: e.getBoundingClientRect().y,
-    })),
-  );
-  assert.equal(choiceBoxes[0].y, choiceBoxes[1].y);
-  assert.ok(choiceBoxes[2].y > choiceBoxes[0].y);
-  await ui.getByRole("tab", { name: "Matching", exact: true }).click();
-  await ui.getByRole("button", { name: "Idea: GPU", exact: true }).click();
-  await ui
-    .getByRole("button", {
-      name: "Meaning: Concurrent operations",
-      exact: true,
-    })
-    .click();
-  await ui
-    .getByRole("button", { name: "Idea: Parallel execution", exact: true })
-    .click();
-  await ui
-    .getByRole("button", { name: "Meaning: Processor", exact: true })
-    .click();
-  await ui.getByRole("button", { name: "Check matches", exact: true }).click();
-  await ui.getByText("0 of 2 matched correctly", { exact: true }).waitFor();
-  await ui
-    .locator(".matching")
-    .getByText("Matching result recorded", { exact: true })
-    .waitFor();
-  await ui.screenshot({
-    path: "test-results/reading-matching.png",
-    fullPage: true,
-  });
+  await ui.getByRole("button", { name: /^Continue/ }).click();
+  await expect.poll(() => store.get("test", sessionId).attempts.length).toBe(3);
   assert.deepEqual(
     store.get("test", sessionId).attempts.find((a) => a.studyId === "m1")
       ?.matches,
-    [1, 0],
+    [0, 1],
   );
+  await ui
+    .getByRole("button", { name: "See it on your map", exact: true })
+    .click();
+  await expect(
+    ui.getByRole("button", { name: /What I remember/ }),
+  ).toHaveAttribute("aria-pressed", "true");
   await ui.getByRole("tab", { name: /^Sources/ }).click();
   await ui.getByText("On the map", { exact: true }).first().waitFor();
   await ui.reload();
+  await ui.getByRole("tab", { name: "Summary", exact: true }).click();
   await ui.getByRole("heading", { name: fixture.title, exact: true }).waitFor();
   assert.equal(store.get("test", sessionId).attempts.length, 3);
   // Exercise the real packaged panel at 320px, both colour schemes and reduced motion.
@@ -737,14 +630,14 @@ try {
     assert.equal(
       await ui.evaluate(
         () =>
-          getComputedStyle(document.querySelector(".lantern")!, "::after")
+          getComputedStyle(document.querySelector(".carrot")!, "::after")
             .animationDuration,
       ),
       "0s",
     );
     assert.equal(
       await ui.evaluate(() => getComputedStyle(document.body).backgroundColor),
-      scheme === "dark" ? "rgb(18, 14, 32)" : "rgb(244, 243, 248)",
+      scheme === "dark" ? "rgb(15, 15, 17)" : "rgb(247, 247, 245)",
     );
     await ui.screenshot({
       path: `test-results/sidebar-320-${scheme}.png`,
@@ -765,7 +658,7 @@ try {
   await ui.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   assert.equal(
     await ui.evaluate(() => getComputedStyle(document.body).backgroundColor),
-    "rgb(18, 14, 32)",
+    "rgb(15, 15, 17)",
   );
   await ui.reload();
   await ui.locator('html[data-theme="dark"]').waitFor();
@@ -896,7 +789,7 @@ try {
   assert.deepEqual(failures, []);
   assert.deepEqual(remoteFontRequests, []);
   console.log(
-    "PASS reading first: opt-in trusted selection; programmatic/editable selection excluded; compact indicator pause/resume/hide; disclosure retained across changed storage; static radial/trail map; scoped quiz with immediate persisted grading; matching checked/persisted; 320px light/dark, offline/paused/handoff states, single primary action, real evidence depth, inferred tunnels, keyboard selection, local fonts, partial ratings and practice-mode save race; packaged Chrome extension: pregranted website permissions (native prompt untested), automatic search/article capture, input exclusion, highlight, pause, unrelated tab exclusion, explicit include, authenticated sync, persisted fixture display, evidence, recall progress, quiz, flashcard, reload, narrow layout, interrupted delivery, browser profile restart with queued review, retry, and offline deletion without resurrection. Go generation NOT exercised.",
+    "PASS reading first: opt-in trusted selection; programmatic/editable selection excluded; compact indicator pause/resume/hide; disclosure retained across changed storage; measured layered map; scoped quiz with immediate persisted grading; matching checked/persisted; 320px light/dark, offline/paused/handoff states, single primary action, real evidence depth, inferred connections, keyboard selection, local fonts, partial ratings and practice run results; packaged Chrome extension: pregranted website permissions (native prompt untested), automatic search/article capture, input exclusion, highlight, pause, unrelated tab exclusion, explicit include, authenticated sync, persisted fixture display, evidence, recall progress, quiz, flashcard, reload, narrow layout, interrupted delivery, browser profile restart with queued review, retry, and offline deletion without resurrection. Go generation NOT exercised.",
   );
 } catch (error) {
   console.error("UI failures:", failures);

@@ -1,0 +1,503 @@
+{
+  "id": "s1",
+  "short": "Starting Investing",
+  "title": "Starting Investing: Diversification, ETFs, Stocks, Dividends, and Taxes",
+  "status": "paused",
+  "createdAt": "2026-10-25T12:00:00.000Z",
+  "updatedAt": "2026-10-25T12:00:00.000Z",
+  "analyzedAt": "2026-10-25T12:00:00.000Z",
+  "version": 1,
+  "settings": {
+    "depth": "balanced",
+    "analogy": "everyday examples",
+    "activities": ["quiz", "matching", "connection", "flashcard"],
+    "articleCapture": true,
+    "autoHighlights": false
+  },
+  "analysis": {
+    "sessionId": "s1",
+    "expectedVersion": 0,
+    "title": "Starting Investing: Diversification, ETFs, Stocks, Dividends, and Taxes",
+    "summary": "Investing starts with you, not a ticker: goals, time horizon and risk tolerance come first. Broad ETFs supply diversified exposure; individual stocks add concentration and research demands; dividends may be spent or reinvested but are not guaranteed; and tax effects depend on account type and personal circumstances.",
+    "takeaways": [
+      {
+        "text": "Start with goals, horizon and risk tolerance before choosing an instrument.",
+        "concept": "n1"
+      },
+      {
+        "text": "Broad ETFs reduce single-company dependence, but diversification doesn't remove market losses.",
+        "concept": "n3"
+      },
+      {
+        "text": "Dividends are variable. Judge them with the underlying business, not yield alone.",
+        "concept": "n7"
+      },
+      {
+        "text": "Tax treatment depends on account type, income, filing status and timing.",
+        "concept": "n9"
+      }
+    ],
+    "route": ["n1", "n2", "n3", "n4", "n5", "n6", "n7", "n9"],
+    "concepts": [
+      {
+        "id": "n1",
+        "label": "Goals and risk tolerance",
+        "explanation": "Your time horizon and how much loss you can stomach decide which investments fit, before any specific fund or stock.",
+        "main": true,
+        "captureIds": ["c5", "c2"]
+      },
+      {
+        "id": "n2",
+        "label": "Portfolio foundation",
+        "explanation": "A broad, low-cost core that the rest of the portfolio is built around.",
+        "captureIds": ["c4"]
+      },
+      {
+        "id": "n3",
+        "label": "Broad-market ETFs",
+        "explanation": "One fund that holds hundreds or thousands of securities, so you get the market in a single trade.",
+        "captureIds": ["c4", "c5"]
+      },
+      {
+        "id": "n4",
+        "label": "Diversification",
+        "explanation": "Spreading money across many holdings so one company's bad news can't sink the whole result. It lowers single-company risk, not market risk.",
+        "captureIds": ["c4"]
+      },
+      {
+        "id": "n5",
+        "label": "ETF structure and costs",
+        "explanation": "ETFs trade like stocks but are built like funds; expense ratios and spreads are the price of that convenience.",
+        "captureIds": ["c5"]
+      },
+      {
+        "id": "n6",
+        "label": "Individual stocks",
+        "explanation": "Owning one company concentrates your outcome in it and asks you to research that business.",
+        "captureIds": ["c5"]
+      },
+      {
+        "id": "n7",
+        "label": "Dividends",
+        "explanation": "Cash a company may pay shareholders out of earnings. It can be raised, cut or cancelled.",
+        "captureIds": ["c7"]
+      },
+      {
+        "id": "n8",
+        "label": "Research and rebalancing",
+        "explanation": "Checking your holdings now and then and nudging them back to the mix you chose.",
+        "captureIds": ["c5"]
+      },
+      {
+        "id": "n9",
+        "label": "Taxes and account type",
+        "explanation": "The same dividend can be taxed now, later or never depending on whether it sits in a taxable, tax-deferred or tax-free account.",
+        "captureIds": ["c8", "c7"],
+        "gap": "Your trail doesn't compare Roth and traditional accounts yet. Try: \u201croth vs traditional ira dividends\u201d."
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "n1",
+        "target": "n2",
+        "label": "shapes",
+        "explanation": "What you're investing for and how long you can wait decide what the core of the portfolio should be.",
+        "captureIds": ["c2"],
+        "evidenceKind": "supported"
+      },
+      {
+        "id": "e2",
+        "source": "n3",
+        "target": "n4",
+        "label": "delivers",
+        "explanation": "Holding a whole basket in one fund is the easiest way to get diversification.",
+        "captureIds": ["c4"],
+        "evidenceKind": "supported"
+      },
+      {
+        "id": "e3",
+        "source": "n5",
+        "target": "n3",
+        "label": "explains the price of",
+        "explanation": "Expense ratios and trading spreads are what you pay for broad exposure in one ticker.",
+        "captureIds": ["c5"],
+        "evidenceKind": "supported"
+      },
+      {
+        "id": "e4",
+        "source": "n3",
+        "target": "n2",
+        "label": "often anchors",
+        "explanation": "Go inferred this: many beginner guides use a broad ETF as the core holding.",
+        "captureIds": ["c5"],
+        "evidenceKind": "inference"
+      },
+      {
+        "id": "e5",
+        "source": "n4",
+        "target": "n6",
+        "label": "contrasts with",
+        "explanation": "A single stock is the opposite of diversification: one company, one outcome.",
+        "captureIds": ["c4"],
+        "evidenceKind": "supported"
+      },
+      {
+        "id": "e6",
+        "source": "n6",
+        "target": "n7",
+        "label": "may distribute earnings as",
+        "explanation": "Some companies return part of their earnings to shareholders as dividends.",
+        "captureIds": ["c7"],
+        "evidenceKind": "supported"
+      },
+      {
+        "id": "e7",
+        "source": "n7",
+        "target": "n1",
+        "label": "serves income or growth goals",
+        "explanation": "Whether you spend dividends or reinvest them depends on what you're investing for.",
+        "captureIds": ["c7"],
+        "evidenceKind": "supported"
+      },
+      {
+        "id": "e8",
+        "source": "n7",
+        "target": "n9",
+        "label": "interact with",
+        "explanation": "A reinvested dividend in a taxable account is still taxed in the year it's paid.",
+        "captureIds": ["c8"],
+        "evidenceKind": "supported"
+      },
+      {
+        "id": "e9",
+        "source": "n1",
+        "target": "n9",
+        "label": "decides",
+        "explanation": "Go inferred this: your goals and horizon steer which account type makes sense.",
+        "captureIds": ["c5"],
+        "evidenceKind": "inference"
+      },
+      {
+        "id": "e10",
+        "source": "n8",
+        "target": "n2",
+        "label": "maintains",
+        "explanation": "Rebalancing keeps the foundation at the mix you chose as markets move.",
+        "captureIds": ["c5"],
+        "evidenceKind": "supported"
+      },
+      {
+        "id": "e11",
+        "source": "n6",
+        "target": "n8",
+        "label": "demands more",
+        "explanation": "Picking stocks means ongoing research that a broad fund mostly does for you.",
+        "captureIds": ["c5"],
+        "evidenceKind": "supported"
+      }
+    ],
+    "studyItems": [
+      {
+        "id": "z1",
+        "type": "quiz",
+        "prompt": "A learner wants broad market exposure but worries one company's poor earnings could dominate the result. Which reasoning best follows your sources?",
+        "answer": "A basket spreads single-company risk, but the whole market can still fall. Nothing here guarantees returns.",
+        "choices": [
+          "Buy only the company with the strongest recent earnings",
+          "Use a broad ETF: diversification reduces single-company dependence but doesn't remove market risk",
+          "Choose an ETF because it guarantees positive returns",
+          "Choose a dividend stock because dividends can't be cut"
+        ],
+        "correctIndex": 1,
+        "concept": "n4",
+        "conceptIds": ["n4"],
+        "captureIds": ["c4"]
+      },
+      {
+        "id": "z2",
+        "type": "quiz",
+        "prompt": "Your friend says dividends are a safe, fixed payment. What did your sources actually say?",
+        "answer": "Fidelity is explicit: a company may cut the amount or frequency, or cancel dividends altogether.",
+        "choices": [
+          "Correct, dividends are contractually fixed",
+          "Dividends can be cut, reduced or cancelled at any time",
+          "Only ETFs can cut dividends",
+          "Dividends are only paid by tech companies"
+        ],
+        "correctIndex": 1,
+        "concept": "n7",
+        "conceptIds": ["n7"],
+        "captureIds": ["c7"]
+      },
+      {
+        "id": "z3",
+        "type": "quiz",
+        "prompt": "You reinvest a dividend in a regular taxable brokerage account. When is it generally taxed?",
+        "answer": "Reinvesting doesn't change the timing. It's generally taxable in the year paid.",
+        "choices": [
+          "Only when you sell the shares",
+          "Never, because it was reinvested",
+          "In the year it's paid",
+          "Only after age 59\u00bd"
+        ],
+        "correctIndex": 2,
+        "concept": "n9",
+        "conceptIds": ["n9"],
+        "captureIds": ["c8"]
+      },
+      {
+        "id": "m1",
+        "type": "matching",
+        "prompt": "Match each idea to what it means in your sources.",
+        "answer": "Match each idea to its meaning in your sources.",
+        "conceptIds": ["n3", "n6", "n7", "n9"],
+        "captureIds": ["c4", "c7", "c8"],
+        "pairs": [
+          {
+            "left": "Broad-market ETF",
+            "right": "Basket-based exposure across many securities",
+            "concept": "n3"
+          },
+          {
+            "left": "Individual stock",
+            "right": "Ownership concentrated in one company",
+            "concept": "n6"
+          },
+          {
+            "left": "Dividend",
+            "right": "A payment that may be reduced, suspended or cancelled",
+            "concept": "n7"
+          },
+          {
+            "left": "Reinvested dividend (taxable account)",
+            "right": "Generally taxed in the year it's paid",
+            "concept": "n9"
+          }
+        ]
+      },
+      {
+        "id": "x1",
+        "type": "connection",
+        "prompt": "Why might owning an individual stock lead to dividends, and why can't you count on them?",
+        "answer": "Some companies return part of their earnings to shareholders as dividends.",
+        "conceptIds": ["n6", "n7"],
+        "captureIds": ["c7"]
+      },
+      {
+        "id": "x2",
+        "type": "connection",
+        "prompt": "How does a broad-market ETF deliver diversification?",
+        "answer": "Holding a whole basket in one fund is the easiest way to get diversification.",
+        "conceptIds": ["n3", "n4"],
+        "captureIds": ["c4"]
+      },
+      {
+        "id": "x3",
+        "type": "connection",
+        "prompt": "How do dividends interact with the type of account you hold them in?",
+        "answer": "A reinvested dividend in a taxable account is still taxed in the year it's paid.",
+        "conceptIds": ["n7", "n9"],
+        "captureIds": ["c8"]
+      },
+      {
+        "id": "f1",
+        "type": "flashcard",
+        "prompt": "What does an ETF hold?",
+        "answer": "A basket of securities, often hundreds or thousands of stocks or bonds.",
+        "concept": "n3",
+        "conceptIds": ["n3"],
+        "captureIds": ["c5"]
+      },
+      {
+        "id": "f2",
+        "type": "flashcard",
+        "prompt": "Does diversification remove market risk?",
+        "answer": "No. It reduces single-company risk; the whole market can still fall.",
+        "concept": "n4",
+        "conceptIds": ["n4"],
+        "captureIds": ["c4"]
+      },
+      {
+        "id": "f3",
+        "type": "flashcard",
+        "prompt": "Are dividends guaranteed?",
+        "answer": "No. A company can cut, reduce or cancel them at any time.",
+        "concept": "n7",
+        "conceptIds": ["n7"],
+        "captureIds": ["c7"]
+      },
+      {
+        "id": "f4",
+        "type": "flashcard",
+        "prompt": "What comes before picking an investment?",
+        "answer": "Your goals, time horizon and risk tolerance.",
+        "concept": "n1",
+        "conceptIds": ["n1"],
+        "captureIds": ["c2"]
+      }
+    ],
+    "processedCaptureIds": ["c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8"]
+  },
+  "captures": [
+    {
+      "id": "c1",
+      "sessionId": "s1",
+      "sourceType": "search",
+      "url": "https://google.com",
+      "title": "how to start investing as a beginner",
+      "text": "how to start investing as a beginner",
+      "timestamp": "2026-10-24T20:21:00.000Z",
+      "tag": "none",
+      "references": []
+    },
+    {
+      "id": "c2",
+      "sessionId": "s1",
+      "sourceType": "google_ai_overview",
+      "url": "https://google.com",
+      "title": "AI Overview for that search",
+      "text": "Start by defining your goals and time horizon, then choose diversified, low-cost investments that match how much risk you can tolerate.",
+      "timestamp": "2026-10-24T20:22:00.000Z",
+      "tag": "none",
+      "references": [],
+      "parentCaptureId": "c1"
+    },
+    {
+      "id": "c3",
+      "sessionId": "s1",
+      "sourceType": "search",
+      "url": "https://google.com",
+      "title": "etf vs individual stocks",
+      "text": "etf vs individual stocks",
+      "timestamp": "2026-10-24T20:23:00.000Z",
+      "tag": "none",
+      "references": []
+    },
+    {
+      "id": "c4",
+      "sessionId": "s1",
+      "sourceType": "article",
+      "url": "https://bmogam.com",
+      "title": "ETFs vs. stocks: what's the difference?",
+      "text": "Because an ETF holds a basket of securities, a single company's poor results have less effect on the fund than they would on a portfolio of one stock.",
+      "timestamp": "2026-10-24T20:24:00.000Z",
+      "tag": "none",
+      "references": [],
+      "parentCaptureId": "c3"
+    },
+    {
+      "id": "c5",
+      "sessionId": "s1",
+      "sourceType": "article",
+      "url": "https://investor.vanguard.com",
+      "title": "ETFs vs. Stocks: Which one is best for you? | Vanguard",
+      "text": "ETFs (exchange-traded funds) are a type of investment designed much like mutual funds. They invest in hundreds, sometimes thousands, of individual stocks or bonds.",
+      "timestamp": "2026-10-24T20:25:00.000Z",
+      "tag": "none",
+      "references": [],
+      "parentCaptureId": "c3"
+    },
+    {
+      "id": "c6",
+      "sessionId": "s1",
+      "sourceType": "search",
+      "url": "https://google.com",
+      "title": "are dividends guaranteed",
+      "text": "are dividends guaranteed",
+      "timestamp": "2026-10-24T20:26:00.000Z",
+      "tag": "none",
+      "references": []
+    },
+    {
+      "id": "c7",
+      "sessionId": "s1",
+      "sourceType": "article",
+      "url": "https://www.fidelity.com",
+      "title": "What is a dividend and how does it work? | Fidelity",
+      "text": "Dividends aren't guaranteed. A company may cut the dividend amount or frequency at any time or cancel them altogether.",
+      "timestamp": "2026-10-24T20:27:00.000Z",
+      "tag": "none",
+      "references": [],
+      "parentCaptureId": "c6"
+    },
+    {
+      "id": "c8",
+      "sessionId": "s1",
+      "sourceType": "highlight",
+      "url": "https://www.fidelity.com",
+      "title": "What is a dividend and how does it work? | Fidelity",
+      "text": "Reinvested dividends in a taxable account are generally taxed in the year they are paid, even though you never received the cash.",
+      "timestamp": "2026-10-24T20:28:00.000Z",
+      "tag": "confusing",
+      "references": [],
+      "parentCaptureId": "c7"
+    },
+    {
+      "id": "c9",
+      "sessionId": "s1",
+      "sourceType": "search",
+      "url": "https://google.com",
+      "title": "roth ira vs taxable brokerage dividends",
+      "text": "roth ira vs taxable brokerage dividends",
+      "timestamp": "2026-10-24T20:29:00.000Z",
+      "tag": "none",
+      "references": []
+    },
+    {
+      "id": "c10",
+      "sessionId": "s1",
+      "sourceType": "article",
+      "url": "https://irs.gov",
+      "title": "Topic no. 404, Dividends",
+      "text": "Ordinary dividends are the most common type of distribution and are taxed as ordinary income.",
+      "timestamp": "2026-10-24T20:30:00.000Z",
+      "tag": "none",
+      "references": [],
+      "parentCaptureId": "c9"
+    }
+  ],
+  "processed": ["c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8"],
+  "attempts": [
+    {
+      "id": "seed0",
+      "studyId": "f4",
+      "analysisVersion": 1,
+      "response": "Fixture practice attempt",
+      "rating": "understood",
+      "timestamp": "2026-10-25T12:00:00.000Z"
+    },
+    {
+      "id": "seed1",
+      "studyId": "f1",
+      "analysisVersion": 1,
+      "response": "Fixture practice attempt",
+      "rating": "understood",
+      "timestamp": "2026-10-25T12:00:00.000Z"
+    },
+    {
+      "id": "seed2",
+      "studyId": "z1",
+      "analysisVersion": 1,
+      "response": "Fixture practice attempt",
+      "rating": "again",
+      "timestamp": "2026-10-25T12:00:00.000Z"
+    },
+    {
+      "id": "seed4",
+      "studyId": "z2",
+      "analysisVersion": 1,
+      "response": "Fixture practice attempt",
+      "rating": "again",
+      "timestamp": "2026-10-25T12:00:00.000Z"
+    },
+    {
+      "id": "seed-stocks",
+      "studyId": "x1",
+      "analysisVersion": 1,
+      "rating": "again",
+      "response": "Fixture practice attempt",
+      "timestamp": "2026-10-25T12:00:00.000Z"
+    }
+  ]
+}

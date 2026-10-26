@@ -46,7 +46,7 @@ export function Brand({ onClick }: { onClick: () => void }) {
   return (
     <button className="brand" onClick={onClick} aria-label="RabbitHole home">
       <span className="mark">
-        <img src="rabbithole-mark.svg" width={26} height={26} alt="" />
+        <Icon name="logo" size={26} />
       </span>
       <span className="word">RabbitHole</span>
     </button>
@@ -54,7 +54,7 @@ export function Brand({ onClick }: { onClick: () => void }) {
 }
 export function LiveStatus({ active = false }: { active?: boolean }) {
   return (
-    <span className={`lantern ${active ? "" : "off"}`} aria-hidden="true" />
+    <span className={`carrot ${active ? "" : "off"}`} aria-hidden="true" />
   );
 }
 export function Chip({
@@ -62,7 +62,7 @@ export function Chip({
   kind = "",
 }: {
   children: React.ReactNode;
-  kind?: "new" | "done" | "violet" | "error" | "";
+  kind?: "new" | "done" | "primary" | "error" | "";
 }) {
   return (
     <span className={`chip ${kind ? `chip-${kind}` : ""}`}>{children}</span>

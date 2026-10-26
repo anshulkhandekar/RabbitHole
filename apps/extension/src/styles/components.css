@@ -40,7 +40,7 @@ a {
 }
 
 :focus-visible {
-  outline: 2px solid var(--violet);
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
   border-radius: 6px;
 }
@@ -79,16 +79,16 @@ a {
   color: var(--ink-2);
 }
 .btn-primary {
-  background: var(--violet);
-  border-color: var(--violet);
-  color: var(--chamber-ink);
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
 }
 .btn-primary .ic {
   color: currentColor;
 }
 .btn-primary:hover {
-  background: var(--violet-hover);
-  border-color: var(--violet-hover);
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
 }
 .btn-quiet {
   background: transparent;
@@ -163,35 +163,35 @@ a {
   border-radius: 9px;
   display: grid;
   place-items: center;
-  background: var(--violet-soft);
-  color: var(--violet);
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
-/* ---------- <LiveStatus> lantern: replaces the green dot + "COLLECTING IN INCLUDED TABS" ---------- */
-.lantern {
+/* ---------- <LiveStatus> carrot: replaces the green dot + "COLLECTING IN INCLUDED TABS" ---------- */
+.carrot {
   position: relative;
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--lantern);
+  background: var(--carrot);
   flex: none;
 }
-.lantern::after {
+.carrot::after {
   content: "";
   position: absolute;
   inset: -4px;
   border-radius: 50%;
-  background: var(--lantern);
+  background: var(--carrot);
   opacity: 0.35;
-  animation: lantern 2.4s var(--ease-out) infinite;
+  animation: carrot 2.4s var(--ease-out) infinite;
 }
-.lantern.off {
+.carrot.off {
   background: var(--ink-3);
 }
-.lantern.off::after {
+.carrot.off::after {
   display: none;
 }
-@keyframes lantern {
+@keyframes carrot {
   0% {
     transform: scale(0.6);
     opacity: 0.45;
@@ -203,7 +203,7 @@ a {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lantern::after {
+  .carrot::after {
     animation: none;
     opacity: 0.25;
   }
@@ -224,16 +224,16 @@ a {
   color: var(--ink-2);
 }
 .chip-new {
-  background: var(--lantern-soft);
-  color: var(--lantern-ink);
+  background: var(--carrot-soft);
+  color: var(--carrot-ink);
 }
 .chip-done {
   background: var(--moss-soft);
   color: var(--moss);
 }
-.chip-violet {
-  background: var(--violet-soft);
-  color: var(--violet-ink);
+.chip-primary {
+  background: var(--primary-soft);
+  color: var(--primary-ink);
 }
 .chip-error {
   background: var(--ember-soft);
@@ -279,7 +279,7 @@ a {
   box-shadow: var(--shadow-lift);
 }
 .segmented button[aria-selected="true"] .ic {
-  color: var(--violet);
+  color: var(--primary);
 }
 .segmented .count {
   font-size: var(--t-xs);
@@ -287,7 +287,7 @@ a {
   font-weight: 500;
 }
 
-/* ---------- <Trail> the descending burrow line (sidebar + Sources view) ---------- */
+/* ---------- <Trail> the descending canvas line (sidebar + Sources view) ---------- */
 .trail {
   list-style: none;
   margin: 0;
@@ -305,7 +305,7 @@ a {
   background: linear-gradient(
     to bottom,
     var(--line-strong),
-    var(--violet) 140%
+    var(--primary) 140%
   );
 }
 .stop {
@@ -338,14 +338,14 @@ a {
   height: 13px;
 }
 .stop.is-pending .stop-node {
-  border-color: var(--lantern);
-  color: var(--lantern-ink);
-  background: var(--lantern-soft);
+  border-color: var(--carrot);
+  color: var(--carrot-ink);
+  background: var(--carrot-soft);
 }
 .stop.is-highlight .stop-node {
-  background: var(--lantern);
-  border-color: var(--lantern);
-  color: var(--burrow);
+  background: var(--carrot);
+  border-color: var(--carrot);
+  color: var(--canvas);
 }
 .stop-body {
   min-width: 0;
@@ -376,7 +376,7 @@ a {
   color: var(--ink-3);
 }
 a.stop-title:hover {
-  color: var(--violet);
+  color: var(--primary);
 }
 .stop-meta {
   display: flex;
@@ -390,7 +390,7 @@ a.stop-title:hover {
   margin: 6px 0 2px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: var(--lantern-soft);
+  background: var(--carrot-soft);
   color: var(--ink);
   font-family: var(--font-source);
   font-size: var(--t-sm);
@@ -414,7 +414,7 @@ a.stop-title:hover {
 }
 @keyframes glow {
   0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--lantern) 70%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--carrot) 70%, transparent);
   }
   100% {
     box-shadow: 0 0 0 14px transparent;
@@ -425,7 +425,7 @@ a.stop-title:hover {
 .source-quote {
   margin: 0;
   padding: var(--s-3) var(--s-4);
-  border-left: 3px solid var(--lantern);
+  border-left: 3px solid var(--carrot);
   border-radius: 0 10px 10px 0;
   background: var(--surface-sunk);
   font-family: var(--font-source);
@@ -447,7 +447,7 @@ a.stop-title:hover {
   text-underline-offset: 2px;
 }
 .source-quote footer a:hover {
-  color: var(--violet);
+  color: var(--primary);
 }
 
 /* ---------- <Textarea> ---------- */
@@ -472,8 +472,8 @@ a.stop-title:hover {
 }
 .field:focus {
   outline: none;
-  border-color: var(--violet);
-  box-shadow: 0 0 0 4px var(--violet-soft);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px var(--primary-soft);
 }
 
 /* ---------- <Toast> ---------- */

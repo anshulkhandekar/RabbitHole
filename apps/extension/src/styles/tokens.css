@@ -1,50 +1,57 @@
-/* RabbitHole design tokens.
+/* RabbitHole design tokens, v2 ("Daylight").
    Source of truth for color, type, spacing, radius, motion.
-   Port as-is into apps/extension (e.g. src/styles/tokens.css) and reference only these vars. */
+   v2 drops every purple. The UI is neutral graphite with ONE warm accent (carrot).
+   Port as-is into apps/extension (src/styles/tokens.css) and reference only these vars.
+   v1 (violet / lantern / burrow) is kept in archive/v1/ for reference only. */
 
 @import url("https://fonts.googleapis.com/css2?family=Geologica:wght@300..700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;1,7..72,400&display=swap");
 /* In the extension, bundle fonts locally instead: @fontsource-variable/geologica + @fontsource-variable/literata */
 
 :root {
-  /* Surface — cool lilac paper, never cream */
-  --paper: #F4F3F8;
+  /* Surfaces: neutral, very slightly warm. No tinted greys. */
+  --paper: #F7F7F5;
   --surface: #FFFFFF;
-  --surface-sunk: #ECEAF2;
-  --line: #E1DEEA;
-  --line-strong: #CBC6D9;
+  --surface-sunk: #F0F0ED;
+  --line: #E6E5E1;
+  --line-strong: #D3D2CC;
 
-  /* Ink — deep plum, not neutral near-black */
-  --ink: #1E1833;
-  --ink-2: #57516B;
-  --ink-3: #8A849C;
+  /* Ink */
+  --ink: #17171A;
+  --ink-2: #55555C;
+  --ink-3: #8D8D94;
 
-  /* Accent — one violet, used for primary action + selection */
-  --violet: #5638E8;
-  --violet-hover: #4529D1;
-  --violet-soft: #ECE8FE;
-  --violet-ink: #3A23B0;
+  /* Primary action = ink. Buttons are black-on-white in light, white-on-black in dark. */
+  --primary: #17171A;
+  --primary-hover: #33333A;
+  --on-primary: #FFFFFF;
+  --primary-soft: #EDEDEA;   /* selected rows, active tab background */
+  --primary-ink: #17171A;
 
-  /* Lantern — ONLY for live capture, new/unprocessed finds, and highlights */
-  --lantern: #F2B23E;
-  --lantern-soft: #FFF3D9;
-  --lantern-ink: #8A5A00;
+  /* Carrot: the only accent. Rule: carrot means "look here".
+     Live capture, new / unprocessed finds, highlights, the selected idea on the map,
+     gaps, and in-session momentum in Practice. Nothing else. */
+  --carrot: #F26A1B;
+  --carrot-hover: #DD5A0E;
+  --carrot-soft: #FFF0E5;
+  --carrot-ink: #A9420A;     /* carrot text on light surfaces (AA) */
 
   /* Status */
-  --moss: #2E9466;
-  --moss-soft: #E2F4EB;
-  --ember: #D2443B;
-  --ember-soft: #FCE9E7;
+  --moss: #1E9E5A;
+  --moss-soft: #E4F5EB;
+  --moss-ink: #12723F;
+  --ember: #DC3B3B;
+  --ember-soft: #FDECEC;
+  --ember-ink: #A82424;
 
-  /* Burrow — the map canvas (always dark, in both themes) */
-  --burrow: #16112A;
-  --burrow-2: #1F1838;
-  --burrow-grid: rgba(255,255,255,0.04);
-  --tunnel: #3D3366;
-  --tunnel-lit: #A996FF;
-  --chamber: #2A2249;
-  --chamber-line: #4A3F7A;
-  --chamber-ink: #EDE9FF;
-  --burrow-ink-2: #9A92BF;
+  /* Map canvas: same family as the page, NOT a dark slab */
+  --canvas: #FBFBFA;
+  --canvas-dot: #DEDDD8;
+  --node: #FFFFFF;
+  --node-line: #D9D8D2;
+  --node-ink: #17171A;
+  --edge: #C2C1BA;
+  --edge-lit: #17171A;
+  --edge-label-bg: #FFFFFF;
 
   /* Type */
   --font-ui: "Geologica", system-ui, sans-serif;
@@ -60,18 +67,18 @@
   --t-2xl: 29px;
   --t-3xl: 35px;
 
-  /* Spacing — 4px grid */
+  /* Spacing: 4px grid */
   --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px;
   --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px; --s-12: 48px;
 
-  /* Radius — hierarchy, not one value everywhere */
+  /* Radius hierarchy */
   --r-chip: 999px;
   --r-control: 10px;
   --r-panel: 16px;
-  --r-chamber: 14px;
+  --r-node: 12px;
 
-  --shadow-lift: 0 1px 0 rgba(30,24,51,.04), 0 6px 20px -8px rgba(30,24,51,.18);
-  --shadow-pop: 0 18px 50px -12px rgba(22,17,42,.45);
+  --shadow-lift: 0 1px 0 rgba(0,0,0,.03), 0 4px 14px -6px rgba(0,0,0,.12);
+  --shadow-pop: 0 18px 48px -14px rgba(0,0,0,.28), 0 2px 6px rgba(0,0,0,.05);
 
   --ease-out: cubic-bezier(.22,1,.36,1);
   --ease-spring: cubic-bezier(.34,1.4,.64,1);
@@ -84,35 +91,32 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper: #120E20;
-    --surface: #1A1530;
-    --surface-sunk: #231C3E;
-    --line: #2C2547;
-    --line-strong: #3E3563;
-    --ink: #F0EDFA;
-    --ink-2: #B3ACCB;
-    --ink-3: #7F779C;
-    --violet: #8B73FF;
-    --violet-hover: #A08CFF;
-    --violet-soft: #2A2152;
-    --violet-ink: #C9BDFF;
-    --lantern-soft: #3A2C10;
-    --lantern-ink: #FFD27A;
-    --moss-soft: #12301F;
-    --ember-soft: #3A1614;
-    --burrow: #0C0919;
-    --burrow-2: #140F26;
+    --paper: #0F0F11; --surface: #18181B; --surface-sunk: #202024;
+    --line: #2A2A2F; --line-strong: #3A3A41;
+    --ink: #EDEDEF; --ink-2: #A9A9B2; --ink-3: #74747D;
+    --primary: #EDEDEF; --primary-hover: #FFFFFF; --on-primary: #111113;
+    --primary-soft: #26262B; --primary-ink: #EDEDEF;
+    --carrot: #FF7A2E; --carrot-hover: #FF8E4D; --carrot-soft: #351C0C; --carrot-ink: #FFAE7A;
+    --moss: #34C77B; --moss-soft: #0F2A1C; --moss-ink: #7EE2AC;
+    --ember: #F06262; --ember-soft: #3A1616; --ember-ink: #FFA3A3;
+    --canvas: #131315; --canvas-dot: #2A2A2F;
+    --node: #1C1C20; --node-line: #34343A; --node-ink: #EDEDEF;
+    --edge: #4A4A52; --edge-lit: #EDEDEF; --edge-label-bg: #1C1C20;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --paper: #120E20; --surface: #1A1530; --surface-sunk: #231C3E;
-  --line: #2C2547; --line-strong: #3E3563;
-  --ink: #F0EDFA; --ink-2: #B3ACCB; --ink-3: #7F779C;
-  --violet: #8B73FF; --violet-hover: #A08CFF; --violet-soft: #2A2152; --violet-ink: #C9BDFF;
-  --lantern-soft: #3A2C10; --lantern-ink: #FFD27A;
-  --moss-soft: #12301F; --ember-soft: #3A1614;
-  --burrow: #0C0919; --burrow-2: #140F26;
+  --paper: #0F0F11; --surface: #18181B; --surface-sunk: #202024;
+  --line: #2A2A2F; --line-strong: #3A3A41;
+  --ink: #EDEDEF; --ink-2: #A9A9B2; --ink-3: #74747D;
+  --primary: #EDEDEF; --primary-hover: #FFFFFF; --on-primary: #111113;
+  --primary-soft: #26262B; --primary-ink: #EDEDEF;
+  --carrot: #FF7A2E; --carrot-hover: #FF8E4D; --carrot-soft: #351C0C; --carrot-ink: #FFAE7A;
+  --moss: #34C77B; --moss-soft: #0F2A1C; --moss-ink: #7EE2AC;
+  --ember: #F06262; --ember-soft: #3A1616; --ember-ink: #FFA3A3;
+  --canvas: #131315; --canvas-dot: #2A2A2F;
+  --node: #1C1C20; --node-line: #34343A; --node-ink: #EDEDEF;
+  --edge: #4A4A52; --edge-lit: #EDEDEF; --edge-label-bg: #1C1C20;
   color-scheme: dark;
 }
 

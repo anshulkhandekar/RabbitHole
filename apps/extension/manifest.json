@@ -31,6 +31,18 @@
   },
   "options_page": "index.html?settings=1",
   "commands": {
+    "open-panel": {
+      "suggested_key": { "default": "Alt+Shift+R", "mac": "Alt+Shift+R" },
+      "description": "Open RabbitHole side panel"
+    },
+    "open-workspace": {
+      "suggested_key": { "default": "Alt+Shift+M", "mac": "Alt+Shift+M" },
+      "description": "Open RabbitHole expanded workspace"
+    },
+    "toggle-indicator": {
+      "suggested_key": { "default": "Alt+Shift+B", "mac": "Alt+Shift+B" },
+      "description": "Hide or show the RabbitHole bunny"
+    },
     "save-highlight": {
       "suggested_key": {
         "default": "Alt+Shift+H",

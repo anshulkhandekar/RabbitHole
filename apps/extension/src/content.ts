@@ -62,12 +62,13 @@ declare const __RABBIT_TOKENS__: string;
   ) => {
     if (
       !context ||
+      context.included === false ||
       context.status !== "active" ||
       context.excluded.includes(location.href) ||
       !text.trim()
     )
       return;
-    return await message({
+    const result = await message({
       type: "capture",
       automatic,
       capture: {
@@ -82,6 +83,20 @@ declare const __RABBIT_TOKENS__: string;
         references,
       },
     });
+    if (result?.saved && indicator) {
+      const dot = indicator.shadowRoot!.querySelector(".status")!;
+      dot.classList.remove("saved");
+      void (dot as HTMLElement).offsetWidth;
+      dot.classList.add("saved");
+      showReadingNote(
+        type === "highlight"
+          ? "Highlight saved"
+          : type === "search"
+            ? "Search saved"
+            : "Page saved",
+      );
+    }
+    return result;
   };
   function safeClone() {
     const clone = document.cloneNode(true) as Document;
@@ -99,6 +114,7 @@ declare const __RABBIT_TOKENS__: string;
     updateIndicator();
     if (
       !context ||
+      context.included === false ||
       context.status !== "active" ||
       document.visibilityState !== "visible"
     )
@@ -181,6 +197,63 @@ declare const __RABBIT_TOKENS__: string;
     return true;
   };
   chrome.runtime.onMessage.addListener(onMessage);
+  let widgetDrag:
+      | { pointerId: number; x: number; y: number; left: number; top: number }
+      | undefined,
+    movedWidget = false;
+  function positionWidget(x: number, y: number) {
+    if (!indicator) return;
+    const left = 8 + Math.max(0, Math.min(1, x)) * Math.max(0, innerWidth - 60),
+      top = 8 + Math.max(0, Math.min(1, y)) * Math.max(0, innerHeight - 56);
+    indicator.style.left = `${left}px`;
+    indicator.style.top = `${top}px`;
+    indicator.style.right = "auto";
+    indicator.dataset.edge = left < innerWidth / 2 ? "left" : "right";
+  }
+  window.addEventListener(
+    "pointermove",
+    (event) => {
+      if (!widgetDrag || event.pointerId !== widgetDrag.pointerId || !indicator)
+        return;
+      const dx = event.clientX - widgetDrag.x,
+        dy = event.clientY - widgetDrag.y;
+      if (!movedWidget && Math.hypot(dx, dy) < 5) return;
+      movedWidget = true;
+      positionWidget(
+        (widgetDrag.left + dx - 8) / Math.max(1, innerWidth - 60),
+        (widgetDrag.top + dy - 8) / Math.max(1, innerHeight - 56),
+      );
+      event.preventDefault();
+    },
+    { signal: events.signal },
+  );
+  const endWidgetDrag = () => {
+    if (widgetDrag && movedWidget && indicator) {
+      const position = {
+        x:
+          (parseFloat(indicator.style.left) - 8) / Math.max(1, innerWidth - 60),
+        y:
+          (parseFloat(indicator.style.top) - 8) / Math.max(1, innerHeight - 56),
+      };
+      context.widgetPosition = position;
+      void message({ type: "reading-position", position });
+    }
+    widgetDrag = undefined;
+  };
+  window.addEventListener("pointerup", endWidgetDrag, {
+    signal: events.signal,
+  });
+  window.addEventListener("pointercancel", endWidgetDrag, {
+    signal: events.signal,
+  });
+  window.addEventListener(
+    "resize",
+    () => {
+      if (context?.widgetPosition)
+        positionWidget(context.widgetPosition.x, context.widgetPosition.y);
+    },
+    { signal: events.signal },
+  );
   let indicator: HTMLElement | undefined,
     noteTimer: ReturnType<typeof setTimeout> | undefined,
     selectionTimer: ReturnType<typeof setTimeout> | undefined,
@@ -199,6 +272,8 @@ declare const __RABBIT_TOKENS__: string;
     if (!indicator) {
       indicator = document.createElement("div");
       indicator.dataset.rabbitholeReading = "true";
+      if (context.theme === "light" || context.theme === "dark")
+        indicator.dataset.theme = context.theme;
       const shadow = indicator.attachShadow({ mode: "open" }),
         style = document.createElement("style");
       style.textContent =
@@ -228,10 +303,30 @@ declare const __RABBIT_TOKENS__: string;
       const status = document.createElement("span");
       status.className = "status";
       open.append(status);
+      status.addEventListener("animationend", (event) => {
+        if (event.animationName === "capture-saved")
+          status.classList.remove("saved");
+      });
+      open.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        const rect = indicator!.getBoundingClientRect();
+        movedWidget = false;
+        widgetDrag = {
+          pointerId: event.pointerId,
+          x: event.clientX,
+          y: event.clientY,
+          left: rect.left,
+          top: rect.top,
+        };
+        open.setPointerCapture?.(event.pointerId);
+        event.preventDefault();
+      });
       open.onclick = () =>
-        void message({ type: "reading-open" }).then((result) => {
-          if (result?.error) showReadingNote(result.error);
-        });
+        movedWidget
+          ? (movedWidget = false)
+          : void message({ type: "reading-open" }).then((result) => {
+              if (result?.error) showReadingNote(result.error);
+            });
       const pause = document.createElement("button");
       pause.className = "pause";
       pause.onclick = async () => {
@@ -255,10 +350,28 @@ declare const __RABBIT_TOKENS__: string;
       widget.append(open, pause, hide);
       shadow.append(widget);
       document.documentElement.append(indicator);
+      if (context.widgetPosition)
+        positionWidget(context.widgetPosition.x, context.widgetPosition.y);
     }
     const active = context.status === "active",
       shadow = indicator.shadowRoot!;
-    shadow.querySelector(".status")!.classList.toggle("paused", !active);
+    if (!widgetDrag && context.widgetPosition)
+      positionWidget(context.widgetPosition.x, context.widgetPosition.y);
+    shadow
+      .querySelector(".status")!
+      .classList.toggle("paused", !active || context.included === false);
+    shadow
+      .querySelector(".status")!
+      .classList.toggle("waiting", context.handoff === "waiting");
+    shadow
+      .querySelector(".status")!
+      .classList.toggle(
+        "error",
+        !!context.syncError || context.handoff === "stalled",
+      );
+    if (context.theme === "light" || context.theme === "dark")
+      indicator.dataset.theme = context.theme;
+    else delete indicator.dataset.theme;
     const pause = shadow.querySelector<HTMLButtonElement>(".pause")!;
     pause.textContent = active ? "Pause" : "Resume";
     pause.title = active ? "Pause collection" : "Resume collection";
@@ -266,7 +379,7 @@ declare const __RABBIT_TOKENS__: string;
       .querySelector(".rabbit")!
       .setAttribute(
         "aria-label",
-        `Open RabbitHole; ${active ? "collecting" : "paused"}`,
+        `Open RabbitHole; ${context.syncError ? "sync needs attention" : context.handoff === "waiting" ? "waiting for Go’s saved summary" : context.handoff === "stalled" ? "check Go for a failed save or approval" : !active ? "paused" : context.included === false ? "this page is not being collected" : "collecting"}. Drag to move.`,
       );
   }
   function showReadingNote(message: string) {
