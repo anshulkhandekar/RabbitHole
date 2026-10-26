@@ -38,6 +38,7 @@ test("authenticated API and official MCP client complete read → validated writ
         "GetSession",
         "SaveSessionAnalysis",
         "ValidateSessionAnalysis",
+        "SaveValidatedAnalysis",
       ],
     );
     assert.equal(tools.tools[2].annotations?.readOnlyHint, false);
@@ -69,11 +70,17 @@ test("authenticated API and official MCP client complete read → validated writ
     });
     assert.equal(checked.isError, undefined);
     assert.equal(JSON.parse((checked.content as any)[0].text).valid, true);
+    const receipt = JSON.parse((checked.content as any)[0].text);
+    assert.ok(receipt.validationId);
     assert.equal(db.get("alice", "s1").version, 0);
     assert.equal(db.get("alice", "s1").analysis, null);
     const saved = await client.callTool({
-      name: "SaveSessionAnalysis",
-      arguments: analysis(),
+      name: "SaveValidatedAnalysis",
+      arguments: {
+        sessionId: "s1",
+        validationId: receipt.validationId,
+        title: receipt.title,
+      },
     });
     assert.equal(saved.isError, undefined);
     const stored = await (
@@ -83,6 +90,16 @@ test("authenticated API and official MCP client complete read → validated writ
     ).json();
     assert.deepEqual(stored.analysis, analysis());
     assert.equal(stored.version, 1);
+    const replayed = await client.callTool({
+      name: "SaveValidatedAnalysis",
+      arguments: {
+        sessionId: "s1",
+        validationId: receipt.validationId,
+        title: receipt.title,
+      },
+    });
+    assert.equal(replayed.isError, undefined);
+    assert.equal(db.get("alice", "s1").version, 1);
     const stale = await client.callTool({
       name: "SaveSessionAnalysis",
       arguments: analysis(),

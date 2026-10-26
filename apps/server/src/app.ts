@@ -5,11 +5,13 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { AnalysisInput, Id } from "../../../packages/contracts/src/index";
 import { Store, DomainError } from "./store";
+import { AnalysisDrafts } from "./analysis-drafts";
 export function createApp(
   store: Store,
   users: { owner: string; token: string }[],
 ) {
   const app = express();
+  const drafts = new AnalysisDrafts(store);
   app.disable("x-powered-by");
   app.use(express.json({ limit: "750kb" }));
   app.get("/health", (_req, res) =>
@@ -147,11 +149,29 @@ export function createApp(
       "ValidateSessionAnalysis",
       {
         description:
-          "Read-only preflight for the complete SaveSessionAnalysis payload. Checks IDs, version, evidence quotations, hierarchy and activities without saving or marking captures processed. Correct errors before requesting write approval. A successful preflight does not reserve the version; Save still rechecks atomically.",
+          "Read-only session preflight. Checks the complete guide without saving or marking captures processed. Returns a 30-minute validated draft reference and saveArguments. Call SaveValidatedAnalysis with those short arguments to request normal user approval; do not retype the guide. Saving still rechecks atomically.",
         inputSchema: AnalysisInput.shape,
         annotations: { readOnlyHint: true },
       },
-      (p) => run(() => store.validate(owner, p)),
+      (p) => run(() => drafts.validate(owner, p)),
+    );
+    server.registerTool(
+      "SaveValidatedAnalysis",
+      {
+        description:
+          "Save the exact validated guide using the saveArguments returned by ValidateSessionAnalysis. Requires user approval. No guide arrays need retyping. The draft is owner/session-bound, expires after 30 minutes, and may be lost on server restart. Stale versions are rejected; revalidate after errors. A replay of an already saved reference returns the original receipt without saving twice.",
+        inputSchema: {
+          sessionId: Id,
+          validationId: Id,
+          title: z.string().min(1).max(140),
+        },
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+        },
+      },
+      (p) => run(() => drafts.save(owner, p)),
     );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
