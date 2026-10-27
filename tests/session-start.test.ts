@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { analysis } from "./support";
 import { worker, base } from "./worker-harness";
 
 test("widget position persists and shortcuts open each view and toggle visibility without pausing collection", async () => {
@@ -26,7 +27,7 @@ test("widget position persists and shortcuts open each view and toggle visibilit
   assert.equal(app.local.state.sessions[started.active].status, "active");
 });
 
-test("handoff state is shared across views and clears only after the submitted captures are saved", async () => {
+test("handoff state is shared across views and resolves only after the submitted captures are saved", async () => {
   const app = worker({ id: 7, url: base + "index.html?workspace=1" });
   const started = await app.request("start");
   const id = started.active;
@@ -46,7 +47,7 @@ test("handoff state is shared across views and clears only after the submitted c
     ...sent.sessions[id],
     version: 1,
     processed: ["c1"],
-    analysis: {},
+    analysis: analysis(),
   });
   const partial = await app.request("refresh");
   assert.equal(partial.handoffs[id].status, "waiting");
@@ -54,10 +55,10 @@ test("handoff state is shared across views and clears only after the submitted c
     ...partial.sessions[id],
     version: 2,
     processed: ["c1", "c2"],
-    analysis: {},
+    analysis: analysis(),
   });
   const finished = await app.request("refresh");
-  assert.equal(finished.handoffs[id], undefined);
+  assert.equal(finished.handoffs[id].status, "saved");
 });
 
 test("expanded workspace starts a named session without capturing an unrelated tab", async () => {
@@ -207,3 +208,58 @@ for (const tab of [
     assert.equal(app.local.state, undefined);
   });
 }
+
+test("an unread map update keeps its dot while the next handoff is pending", async () => {
+  const app = worker({ id: 7, url: base + "index.html?workspace=1" });
+  const started = await app.request("start"),
+    id = started.active;
+  await app.request("handoff", { id, prompt: "Rebuild", intent: "rebuild" });
+  app.local.state.config.token = "test-token";
+  app.local.state.queue = [];
+  app.setRemote({ ...started.sessions[id], version: 1, analysis: analysis() });
+  await app.request("refresh");
+  const next = await app.request("handoff", {
+    id,
+    prompt: "More questions",
+    intent: "rebuild",
+  });
+  assert.equal(next.mapUpdated[id], 1);
+  assert.equal(next.handoffs[id].status, "waiting");
+});
+
+test("a six-find handoff finishes after its batch saves while later finds remain pending", async () => {
+  const app = worker({ id: 7, url: base + "index.html?workspace=1" });
+  const started = await app.request("start"),
+    id = started.active;
+  app.local.state.sessions[id].captures = Array.from({ length: 8 }, (_, i) => ({
+    id: `c${i + 1}`,
+  }));
+  const sent = await app.request("handoff", {
+    id,
+    prompt: "Process first batch",
+  });
+  assert.deepEqual(sent.handoffs[id].captureIds, [
+    "c1",
+    "c2",
+    "c3",
+    "c4",
+    "c5",
+    "c6",
+  ]);
+  app.local.state.config.token = "test-token";
+  app.local.state.queue = [];
+  app.setRemote({
+    ...sent.sessions[id],
+    version: 1,
+    processed: ["c1", "c2", "c3", "c4", "c5", "c6"],
+    analysis: analysis(),
+  });
+  const refreshed = await app.request("refresh");
+  assert.equal(refreshed.handoffs[id].status, "saved");
+  assert.equal(
+    refreshed.sessions[id].captures.filter(
+      (c: any) => !refreshed.sessions[id].processed.includes(c.id),
+    ).length,
+    2,
+  );
+});

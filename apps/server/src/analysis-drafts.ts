@@ -22,7 +22,7 @@ export class AnalysisDrafts {
     private now = Date.now,
   ) {}
   validate(owner: string, input: unknown) {
-    const payload = AnalysisInput.parse(input);
+    const payload = this.store.canonicalAnalysis(owner, input);
     this.store.validate(owner, payload);
     for (const [key, draft] of this.drafts)
       if (draft.expires <= this.now()) this.drafts.delete(key);

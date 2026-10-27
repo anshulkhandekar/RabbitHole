@@ -14,7 +14,7 @@
     "test": "tsx --test tests/*.test.ts",
     "check": "npm run typecheck && npm test && npm run build",
     "start": "node --env-file-if-exists=.env dist/server/index.mjs",
-    "test:browser": "tsx tests/browser.ts",
+    "test:browser": "tsx tests/browser.ts && tsx tests/ui-refresh-browser.ts",
     "test:reload": "tsx tests/content-reload.ts",
     "test:stage3": "tsx tests/stage3-browser.ts",
     "test:release": "npm run check && npm run lint && npm run test:browser && npm run test:stage3 && npm run test:reload",

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createApp } from "../apps/server/src/app";
-import { setup, analysis } from "./support";
+import { setup, analysis, capture } from "./support";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 test("authenticated API and official MCP client complete read → validated write → exact persisted retrieval", async () => {
@@ -75,9 +75,20 @@ test("authenticated API and official MCP client complete read → validated writ
     });
     assert.equal(invalid.isError, true);
     assert.match((invalid.content as any)[0].text, /mistyped-capture/);
+    const refs = data.processingDefaults.processedCaptureIds;
+    assert.equal(refs.length, 1);
+    assert.equal(data.captures[0].ref, refs[0]);
+    const refPayload = analysis();
+    refPayload.processedCaptureIds = refs;
+    for (const item of [
+      ...refPayload.concepts,
+      ...refPayload.edges,
+      ...refPayload.studyItems,
+    ])
+      item.captureIds = refs;
     const checked = await client.callTool({
       name: "ValidateSessionAnalysis",
-      arguments: analysis(),
+      arguments: refPayload,
     });
     assert.equal(checked.isError, undefined);
     assert.equal(JSON.parse((checked.content as any)[0].text).valid, true);
@@ -153,6 +164,27 @@ test("authenticated API and official MCP client complete read → validated writ
     assert.deepEqual(actual.analysis.overview, rich.overview);
     assert.equal(actual.analysis.concepts[1].parentId, "n1");
     assert.equal(actual.pending, 0);
+    for (let i = 2; i <= 9; i++)
+      db.capture(
+        "alice",
+        "s1",
+        capture(`c${i}`, `Public synthetic source ${i}`),
+      );
+    const firstBatch = await client.callTool({
+      name: "GetSession",
+      arguments: { sessionId: "s1" },
+    });
+    const firstData = JSON.parse((firstBatch.content as any)[0].text);
+    assert.equal(firstData.captures.length, 6);
+    assert.equal(firstData.nextOffset, 6);
+    assert.equal(firstData.processingDefaults.processedCaptureIds.length, 6);
+    const lastBatch = await client.callTool({
+      name: "GetSession",
+      arguments: { sessionId: "s1", offset: firstData.nextOffset },
+    });
+    const lastData = JSON.parse((lastBatch.content as any)[0].text);
+    assert.equal(lastData.captures.length, 2);
+    assert.equal(lastData.nextOffset, null);
   } finally {
     await client.close();
     await new Promise<void>((r, e) =>

@@ -38,7 +38,11 @@ function CaptureMenu({
       if (!anchor.current?.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("pointerdown", close);
-    return () => document.removeEventListener("pointerdown", close);
+    document.addEventListener("focusin", close);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("focusin", close);
+    };
   }, [open]);
   const items: [CaptureAction, string][] = [
     hidden ? ["unhide", "Show on map again"] : ["hide", "Hide from map"],
@@ -64,7 +68,11 @@ function CaptureMenu({
       className="stop-menu"
       ref={anchor}
       onKeyDown={(e) => {
-        if (e.key === "Escape") setOpen(false);
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          setOpen(false);
+          anchor.current?.querySelector<HTMLButtonElement>("button")?.focus();
+        }
       }}
     >
       <IconButton
