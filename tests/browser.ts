@@ -298,10 +298,9 @@ try {
   state = await ui.evaluate(() =>
     chrome.runtime.sendMessage({ type: "state" }),
   );
+  // Since Stage 2, a fresh Google search joins the collecting session on its own.
   assert.ok(
-    !state.sessions[sessionId].captures.some(
-      (c: any) => c.text === "Unrelated",
-    ),
+    state.sessions[sessionId].captures.some((c: any) => c.text === "Unrelated"),
   );
   await ui.evaluate(() => chrome.runtime.sendMessage({ type: "include" }));
   await unrelated.waitForTimeout(1800);

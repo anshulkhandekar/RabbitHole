@@ -255,7 +255,8 @@ function Canvas({
         (h - 140) / Math.max(1, bounds.height),
       ),
     );
-    void flow.fitView({ minZoom: 0.7, maxZoom: zoom, padding: 0.2 });
+    // One viewport update per resize. fitView also schedules an update and can
+    // overwrite this position after the next click has focused an idea.
     void flow.setViewport(
       {
         x:
@@ -590,9 +591,22 @@ function Canvas({
                   </p>
                 ) : null;
               })()}
-            <p>
-              {analysis.concepts.find((c) => c.id === route[walk])?.explanation}
-            </p>
+            {(() => {
+              const c = analysis.concepts.find((c) => c.id === route[walk]);
+              return (
+                <>
+                  {c?.claim && <p className="tour-claim">{c.claim}</p>}
+                  <p>{c?.explanation}</p>
+                  {c?.steps && (
+                    <ol className="idea-steps">
+                      {c.steps.map((step, i) => (
+                        <li key={i}>{step}</li>
+                      ))}
+                    </ol>
+                  )}
+                </>
+              );
+            })()}
             <div className="tour-actions">
               <Button disabled={walk === 0} onClick={() => setWalk(walk - 1)}>
                 Back
@@ -646,6 +660,7 @@ export function MapView({
   onSelect,
   onPractice,
   onRebuild,
+  onExplain,
   mapRequest,
 }: {
   session: Session;
@@ -654,6 +669,7 @@ export function MapView({
   onSelect: (s: Selection) => void;
   onPractice: (id: string) => void;
   onRebuild: () => void;
+  onExplain?: (id: string, style: string) => void;
   mapRequest?: { memory?: boolean; walk?: boolean; brighten?: string[] };
 }) {
   const [memory, setMemory] = useState(mapRequest?.memory ?? false),
@@ -711,6 +727,7 @@ export function MapView({
         selected={selected}
         onSelect={onSelect}
         onPractice={(ids, edge) => onPractice(edge ?? ids[0])}
+        onExplain={onExplain}
         onWalk={(id) => {
           onSelect(null);
           const route = routeIds(session.analysis!);

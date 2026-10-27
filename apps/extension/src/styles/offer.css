@@ -1,0 +1,147 @@
+:host {
+  all: initial;
+  position: fixed;
+  top: 68px;
+  right: 16px;
+  z-index: 2147483646;
+  width: min(340px, calc(100vw - 32px));
+  color-scheme: light dark;
+}
+.offer {
+  box-sizing: border-box;
+  padding: 14px 14px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-pop);
+  font: 400 var(--t-sm)/1.45 var(--font-ui);
+  animation: offer-in 220ms var(--ease-out);
+}
+.head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+img {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  filter: brightness(0);
+}
+:host([data-theme="dark"]) img {
+  filter: brightness(0) invert(1);
+}
+@media (prefers-color-scheme: dark) {
+  :host(:not([data-theme="light"])) img {
+    filter: brightness(0) invert(1);
+  }
+}
+p {
+  margin: 0;
+}
+.title {
+  font-weight: 600;
+  font-size: var(--t-base);
+  overflow-wrap: anywhere;
+}
+.sub {
+  color: var(--ink-2);
+  margin-top: 2px;
+}
+input {
+  all: unset;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.familiar {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+.familiar button {
+  flex: 1;
+  min-height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  font-size: var(--t-xs);
+  color: var(--ink-2);
+}
+.familiar button[aria-pressed="true"] {
+  background: var(--primary-soft);
+  border-color: var(--ink-2);
+  color: var(--ink);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+button {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: var(--r-control);
+  color: var(--ink);
+  font: inherit;
+  text-align: center;
+}
+button:hover {
+  background: var(--surface-sunk);
+}
+button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+button.primary {
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: 600;
+}
+button.primary:hover {
+  background: var(--primary-hover);
+}
+button.never {
+  margin-left: auto;
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+  padding: 0 4px;
+}
+.error {
+  margin-top: 8px;
+  color: var(--ember-ink);
+}
+@keyframes offer-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .offer {
+    animation: none;
+  }
+}
+@media print {
+  :host {
+    display: none;
+  }
+}

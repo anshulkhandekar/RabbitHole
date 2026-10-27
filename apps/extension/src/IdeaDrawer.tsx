@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import type { Session } from "../../../packages/contracts/src/index";
 import type { Selection } from "./MapView";
-import { deriveMemory } from "./practice-model";
+import { deriveFlags, deriveMemory } from "./practice-model";
+import { googleSearchUrl, visibleEvidence } from "./ui-model";
+import { Icon } from "./Icon";
 import { Button, IconButton } from "./components";
 import { Evidence } from "./Trail";
 import { ideaDepths, mergeEdges } from "./map-layout";
@@ -11,15 +13,21 @@ export function IdeaDrawer({
   onSelect,
   onPractice,
   onWalk,
+  onExplain,
 }: {
   session: Session;
   selected: Selection;
   onSelect: (s: Selection) => void;
   onPractice: (ids: string[], edgeId?: string) => void;
   onWalk: (id: string) => void;
+  onExplain?: (id: string, style: string) => void;
 }) {
-  const [more, setMore] = useState(false);
-  useEffect(() => setMore(false), [selected?.id]);
+  const [more, setMore] = useState(false),
+    [explain, setExplain] = useState(false);
+  useEffect(() => {
+    setMore(false);
+    setExplain(false);
+  }, [selected?.id]);
   const a = session.analysis!;
   const c =
       selected?.kind === "concept"
@@ -30,8 +38,10 @@ export function IdeaDrawer({
         ? mergeEdges(a.edges).find((e) => e.ids.includes(selected.id))
         : undefined;
   if (!c && !e) return null;
-  const memory = deriveMemory(a, session.attempts);
+  const memory = deriveMemory(a, session.attempts),
+    flags = deriveFlags(a, session.attempts);
   const item = (c ?? e)!,
+    shown = visibleEvidence(session, item.captureIds),
     label = (id: string) => a.concepts.find((c) => c.id === id)?.label ?? id;
   return (
     <aside className="idea-drawer" aria-label="Idea and connection details">
@@ -52,11 +62,15 @@ export function IdeaDrawer({
           <>
             <h2>{c.label}</h2>
             <p className={`memory-line ${memory[c.id]}`}>
-              {memory[c.id] === "strong"
-                ? "● Strong: net right in your recent practice"
-                : memory[c.id] === "shaky"
-                  ? "● Shaky: worth another pass"
-                  : "○ Untested: try practicing this idea"}
+              {flags[c.id] === "misconception"
+                ? "● Confident miss: you were sure, and it was wrong. Fix this first."
+                : flags[c.id] === "fragile"
+                  ? "● Fragile: right, but you guessed or needed a hint"
+                  : memory[c.id] === "strong"
+                    ? "● Strong: net right in your recent practice"
+                    : memory[c.id] === "shaky"
+                      ? "● Shaky: worth another pass"
+                      : "○ Untested: try practicing this idea"}
             </p>
           </>
         ) : (
@@ -74,9 +88,66 @@ export function IdeaDrawer({
             </button>
           </h2>
         )}
+        {c?.claim && <p className="idea-claim">{c.claim}</p>}
+        {c?.why && (
+          <div className="idea-why">
+            <b>Why this exists</b>
+            <p>{c.why}</p>
+          </div>
+        )}
         <p>{item.explanation}</p>
+        {c?.steps && (
+          <ol className="idea-steps" aria-label="How it works, step by step">
+            {c.steps.map((step, i) => (
+              <li key={i}>{step}</li>
+            ))}
+          </ol>
+        )}
+        {item.example && (
+          <div className="idea-example">
+            <b>Example</b>
+            <p>{item.example}</p>
+          </div>
+        )}
+        {c?.boundary && (
+          <div className="idea-boundary">
+            <b>Where it stops applying</b>
+            <p>{c.boundary}</p>
+          </div>
+        )}
+        {c?.takeaways?.length ? (
+          <>
+            <h3>Remember</h3>
+            <ul className="idea-takeaways">
+              {c.takeaways.map((t, i) => (
+                <li key={i}>{t}</li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+        {c?.buildsOn?.length ? (
+          <p className="idea-builds">
+            Builds on{" "}
+            {c.buildsOn.map((id, i) => (
+              <React.Fragment key={id}>
+                {i > 0 && ", "}
+                <button onClick={() => onSelect({ kind: "concept", id })}>
+                  {label(id)}
+                </button>
+              </React.Fragment>
+            ))}
+          </p>
+        ) : null}
         <h3>{c ? "Why it’s on your map" : "Where you read it"}</h3>
-        {e && e.evidenceKind !== "supported" ? (
+        {!shown.length ? (
+          <div className="inferred-box">
+            <b>Sources removed</b>
+            <p>
+              You hid or deleted the sources for this. Rebuild with Go to update
+              the map.
+            </p>
+          </div>
+        ) : e && e.evidenceKind !== "supported" ? (
           <div className="inferred-box">
             <b>Not in your trail</b>
             <p>Go inferred this connection. Check it against your sources.</p>
@@ -85,13 +156,13 @@ export function IdeaDrawer({
           <>
             <Evidence
               session={session}
-              ids={more ? item.captureIds : item.captureIds.slice(0, 1)}
+              ids={more ? shown : shown.slice(0, 1)}
               excerpts={item.evidence}
             />
-            {item.captureIds.length > 1 && !more && (
+            {shown.length > 1 && !more && (
               <button className="text-button" onClick={() => setMore(true)}>
-                Show {item.captureIds.length - 1} more source
-                {item.captureIds.length > 2 ? "s" : ""}
+                Show {shown.length - 1} more source
+                {shown.length > 2 ? "s" : ""}
               </button>
             )}
           </>
@@ -131,6 +202,45 @@ export function IdeaDrawer({
               <div className="gapbox">
                 <b>A gap in your trail</b>
                 <p>{c.gap}</p>
+                {c.nextSearch && (
+                  <a
+                    className="search-chip"
+                    href={googleSearchUrl(c.nextSearch)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Icon name="search" size={14} />
+                    Search: {c.nextSearch}
+                  </a>
+                )}
+              </div>
+            )}
+            {onExplain && (
+              <div className="explain-again">
+                <button
+                  className="text-button"
+                  aria-expanded={explain}
+                  onClick={() => setExplain(!explain)}
+                >
+                  Still unclear? Ask Go to explain it differently
+                </button>
+                {explain && (
+                  <div className="explain-styles">
+                    {[
+                      ["simpler", "Simpler"],
+                      ["steps", "Step by step"],
+                      ["analogy", "With an analogy"],
+                      ["example", "With a worked example"],
+                    ].map(([style, name]) => (
+                      <Button
+                        key={style}
+                        onClick={() => onExplain(c.id, style)}
+                      >
+                        {name}
+                      </Button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </>

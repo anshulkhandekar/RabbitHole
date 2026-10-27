@@ -1,4 +1,10 @@
-# Stage 1 status — October 24, 2026
+# RabbitHole status — October 27, 2026
+
+Stage 3 is implemented and independently verified locally: 87 unit tests, typecheck, production build, formatting, the original packaged browser suite, the Stage 3 user-flow suite, and the actual extension-reload suite pass. Source-removal, deletion recovery, keyboard submission, exports, and map/header fixes are included.
+
+The main-branch deployment, connector release 7 (`schema=5`), and live instruction update are in progress. See [the current build](stage-3-ready.md) and [Stage 3](stage-3.md). Live verification will be recorded here after those operations finish.
+
+## Historical Stage 1 status — October 24, 2026
 
 **Stage 1 is complete as a development checkpoint.** The core product is implemented and deployed, including genuine Go generation, incremental merging and an explicit rich-guide rebuild. This does not close the user's upcoming major fixes, establish consistently strong generation quality, or complete competition submission.
 

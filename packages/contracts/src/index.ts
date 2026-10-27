@@ -37,11 +37,19 @@ const Excerpts = z
   .array(z.object({ captureId: Id, quote: z.string().trim().min(1).max(600) }))
   .max(3)
   .optional();
+export const Familiarity = z.enum(["new", "some", "solid"]);
 export const Concept = z.object({
   main: z.boolean().optional(),
   id: Id,
   label: z.string().min(1).max(90),
+  // One plain sentence that is true without caveats; the explanation follows it.
+  claim: z.string().min(1).max(300).optional(),
   explanation: z.string().min(1).max(1800),
+  // The problem that makes this idea necessary, before its mechanism.
+  why: z.string().min(1).max(500).optional(),
+  steps: z.array(z.string().min(1).max(400)).min(2).max(6).optional(),
+  buildsOn: z.array(Id).max(5).optional(),
+  nextSearch: z.string().min(1).max(140).optional(),
   captureIds: Evidence,
   gap: z.string().max(500).optional(),
   parentId: Id.optional(),
@@ -76,6 +84,9 @@ export const Study = z
       .max(5)
       .optional(),
     level: z.enum(["understand", "apply", "transfer"]).optional(),
+    hints: z.array(z.string().min(1).max(300)).min(1).max(3).optional(),
+    // A sibling of another item, used for retries in a fresh wording.
+    variantOf: Id.optional(),
     pairs: z
       .array(
         z.object({
@@ -153,6 +164,10 @@ export type Session = {
   id: string;
   title: string;
   short?: string;
+  goal?: string;
+  familiarity?: z.infer<typeof Familiarity>;
+  hidden?: string[];
+  removed?: string[];
   status: "active" | "paused" | "finished";
   createdAt: string;
   updatedAt: string;
@@ -173,16 +188,27 @@ export const Review = z.object({
   rating: z.enum(["again", "partly", "understood"]),
   choice: z.number().int().min(0).optional(),
   matches: z.array(z.number().int().min(0)).min(2).max(6).optional(),
+  confidence: z.enum(["guess", "think", "sure"]).optional(),
+  note: z.string().max(1000).optional(),
+  hintsUsed: z.number().int().min(0).max(3).optional(),
   timestamp: z.string().datetime(),
 });
 export type Attempt = z.infer<typeof Review>;
 export const SessionCreate = z.object({
   id: Id,
   title: z.string().min(1).max(140),
+  goal: z.string().trim().min(1).max(300).optional(),
+  familiarity: Familiarity.optional(),
   settings: Preferences.default(() => Preferences.parse({})),
 });
 export const SessionPatch = z.object({
   title: z.string().min(1).max(140).optional(),
+  goal: z.string().trim().min(1).max(300).optional(),
+  familiarity: Familiarity.optional(),
   status: z.enum(["active", "paused", "finished"]).optional(),
   settings: Preferences.optional(),
+});
+export const CapturePatch = z.object({
+  hidden: z.boolean().optional(),
+  tag: z.enum(["important", "confusing", "none"]).optional(),
 });

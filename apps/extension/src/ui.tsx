@@ -20,7 +20,8 @@ import {
   Segmented,
   Toast,
 } from "./components";
-import { Trail, Excluded } from "./Trail";
+import { Trail, Excluded, type CaptureAction } from "./Trail";
+import { toAnkiCsv, toMarkdown, toQuizlet } from "./export-model";
 import { MapView, type Selection } from "./MapView";
 import { shortTitle } from "./summary-model";
 import { Summary } from "./Summary";
@@ -38,6 +39,7 @@ type TabContext = {
   included: boolean;
   count: number;
   excluded: boolean;
+  askOnSearch?: boolean;
 };
 type Update = {
   sessionId: string;
@@ -70,6 +72,8 @@ function App() {
     [menu, setMenu] = useState(false),
     [creating, setCreating] = useState(false),
     [curiosity, setCuriosity] = useState(""),
+    [familiarity, setFamiliarity] = useState(""),
+    [picked, setPicked] = useState<Set<string>>(new Set()),
     [settings, setSettings] = useState(
       new URLSearchParams(location.search).has("settings"),
     ),
@@ -219,8 +223,10 @@ function App() {
   const session: Session | undefined = state?.sessions[state.active],
     sessions = Object.values(state?.sessions ?? {}) as Session[];
   const pending =
-    session?.captures.filter((c) => !session.processed.includes(c.id)).length ??
-    0;
+    session?.captures.filter(
+      (c) =>
+        !session.processed.includes(c.id) && !session.hidden?.includes(c.id),
+    ).length ?? 0;
   const excluded: string[] = state?.excluded[session?.id ?? ""] ?? [];
   const queued = state?.queue?.length ?? 0,
     unsyncedFinds =
@@ -243,6 +249,7 @@ function App() {
     setPracticeEdge(undefined);
     setRename("");
     setCreating(false);
+    setPicked(new Set());
     firstTrail.current = true;
   }, [session?.id]);
   useEffect(() => {
@@ -260,10 +267,15 @@ function App() {
       return;
     }
     if (await grant()) {
-      const value = await action("start", { title: curiosity.trim() });
+      const value = await action("start", {
+        title: curiosity.trim(),
+        goal: curiosity.trim() || undefined,
+        familiarity: familiarity || undefined,
+      });
       if (value?.active) {
         setCreating(false);
         setCuriosity("");
+        setFamiliarity("");
         setUpdated(null);
       }
     } else
@@ -327,7 +339,7 @@ function App() {
     }
     const prompt =
       custom ??
-      `Process RabbitHole session ${session.id}. Retrieve the pending captures and existing analysis using RabbitHole tools. Copy capture IDs verbatim. Merge evidence-linked concepts and selected activities; include overview plus summary, takeaways [{text, concept}], route [conceptId], concept.main, studyItem.concept and matching pairs[].concept. Run read-only ValidateSessionAnalysis on the complete payload and correct errors BEFORE requesting normal SaveValidatedAnalysis approval using the returned saveArguments (sessionId, validationId, title). Do not retype the guide. If validation is unavailable, stop and report that the connector needs updating. Never repeat an unchanged failed save. Report success only after a saved version, and report remaining pending captures.`;
+      `Process RabbitHole session ${session.id}. Retrieve the pending captures and existing analysis using RabbitHole tools. Copy capture IDs verbatim. Merge evidence-linked concepts and selected activities; include overview plus summary, takeaways [{text, concept}], route [conceptId], concept.main, studyItem.concept and matching pairs[].concept. Write each idea as claim, why, explanation (with buildsOn), steps when sequential, example and boundary; answer my goal if the session has one. Quiz wrong choices should each reflect a specific wrong belief, with hints and a variantOf sibling for key questions. Run read-only ValidateSessionAnalysis on the complete payload and correct errors BEFORE requesting normal SaveValidatedAnalysis approval using the returned saveArguments (sessionId, validationId, title). Do not retype the guide. If validation is unavailable, stop and report that the connector needs updating. Never repeat an unchanged failed save. Report success only after a saved version, and report remaining pending captures.`;
     setUpdated(null);
     const receipt = {
       sessionId: session.id,
@@ -352,22 +364,125 @@ function App() {
   function rebuild() {
     if (session)
       void sendToGo(
-        `Rebuild the learning guide for RabbitHole session ${session.id} from its existing captured sources. This is an explicit rebuild request, not a request to mark new captures processed. Retrieve GetSession and the relevant existing evidence texts using captureIds (up to 24 sources this run); preserve unreviewed material and stable IDs. Save the complete analysis using intent "rebuild", expectedVersion from the read and processedCaptureIds [] if no new captures were inspected. Add summary, takeaways [{text, concept}], route [conceptId], concept.main, studyItem.concept and matching pairs[].concept, plus a source-grounded overview, rootConceptId and reading route, parentId hierarchy, useful takeaways, concrete examples, limitations and exact evidence excerpts. Generate a challenging four-option quiz with misconception distractors and a reason for each choice, plus matching if selected. Clearly state which sources you reviewed. Run read-only ValidateSessionAnalysis and correct errors then request SaveValidatedAnalysis approval using the returned saveArguments. Do not retype the guide. Stop if preflight is unavailable; never repeat an unchanged failed save.`,
+        `Rebuild the learning guide for RabbitHole session ${session.id} from its existing captured sources. This is an explicit rebuild request, not a request to mark new captures processed. Retrieve GetSession and the relevant existing evidence texts using captureIds (up to 24 sources this run); preserve unreviewed material and stable IDs. Save the complete analysis using intent "rebuild", expectedVersion from the read and processedCaptureIds [] if no new captures were inspected. Add summary, takeaways [{text, concept}], route [conceptId], concept.main, studyItem.concept and matching pairs[].concept, plus a source-grounded overview, rootConceptId and reading route, parentId hierarchy, useful takeaways and exact evidence excerpts. Write each idea as claim, why, explanation (with buildsOn), steps when sequential, example and boundary, and add nextSearch to gaps. Drop any sources listed in removedCaptureIds. Generate a challenging four-option quiz where each wrong choice reflects a specific wrong belief, with a reason for each choice, hints, and variantOf siblings for key questions, plus matching if selected. Clearly state which sources you reviewed. Run read-only ValidateSessionAnalysis and correct errors then request SaveValidatedAnalysis approval using the returned saveArguments. Do not retype the guide. Stop if preflight is unavailable; never repeat an unchanged failed save.`,
         "rebuild",
       );
   }
-  function exported() {
-    if (!session) return;
-    const url = URL.createObjectURL(
-      new Blob([JSON.stringify(session, null, 2)], {
-        type: "application/json",
-      }),
-    );
+  function download(text: string, name: string, type: string) {
+    const url = URL.createObjectURL(new Blob([text], { type }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `rabbithole-${session.id}.json`;
+    a.download = name;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  const fileName = (s: Session) =>
+    (s.short ?? s.title)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 48) || "rabbithole";
+  function exported(format = "json") {
+    if (!session) return;
+    if (format !== "json" && !session.analysis) {
+      showToast("Send your finds to Go first. There’s nothing to export yet.");
+      return;
+    }
+    if (format === "anki")
+      download(toAnkiCsv(session), `${fileName(session)}-anki.csv`, "text/csv");
+    else if (format === "markdown")
+      download(toMarkdown(session), `${fileName(session)}.md`, "text/markdown");
+    else if (format === "quizlet")
+      void navigator.clipboard
+        .writeText(toQuizlet(session))
+        .then(() =>
+          showToast("Copied. In Quizlet, choose Import and paste it."),
+        )
+        .catch(() => setError("Couldn’t copy to the clipboard."));
+    else
+      download(
+        JSON.stringify(session, null, 2),
+        `rabbithole-${session.id}.json`,
+        "application/json",
+      );
+  }
+  async function captureAction(
+    kind: CaptureAction,
+    c: Session["captures"][number],
+  ) {
+    if (!session) return;
+    if (kind === "delete") {
+      if (
+        !confirm(
+          "Delete this find from RabbitHole, on this device and on the server? This can’t be undone. Hide it instead if you might want it back.",
+        )
+      )
+        return;
+      if (await action("capture-delete", { id: session.id, captureId: c.id }))
+        showToast("Find deleted");
+    } else if (kind === "hide" || kind === "unhide") {
+      if (
+        await action("capture-hide", {
+          id: session.id,
+          captureId: c.id,
+          hidden: kind === "hide",
+        })
+      )
+        showToast(
+          kind === "hide"
+            ? "Hidden from your map. Show it again from its ⋯ menu."
+            : "Back on your map",
+        );
+    } else if (kind === "exclude" || kind === "exclude-site") {
+      if (await action(kind, { url: c.url }))
+        showToast(
+          kind === "exclude"
+            ? "This page won’t be saved again."
+            : `${domain(c.url)} won’t be saved again.`,
+        );
+    } else
+      await action("capture-tag", {
+        id: session.id,
+        captureId: c.id,
+        tag: kind === "untag" ? "none" : kind,
+      });
+  }
+  async function bulk(kind: "hide" | "delete") {
+    if (!session || !picked.size) return;
+    if (
+      kind === "delete" &&
+      !confirm(
+        `Delete ${picked.size} ${picked.size === 1 ? "find" : "finds"} on this device and on the server? This can’t be undone.`,
+      )
+    )
+      return;
+    for (const captureId of picked)
+      await action(kind === "delete" ? "capture-delete" : "capture-hide", {
+        id: session.id,
+        captureId,
+        hidden: true,
+      });
+    showToast(
+      `${picked.size} ${picked.size === 1 ? "find" : "finds"} ${kind === "delete" ? "deleted" : "hidden from your map"}`,
+    );
+    setPicked(new Set());
+  }
+  function explainAgain(id: string, style: string) {
+    if (!session?.analysis) return;
+    const c = session.analysis.concepts.find((c) => c.id === id);
+    if (!c) return;
+    const how =
+      style === "simpler"
+        ? "in plainer words, as if I'm new to the field: shorter sentences, no undefined terms"
+        : style === "steps"
+          ? "as 2 to 5 ordered steps, where each step follows from the one before"
+          : style === "analogy"
+            ? `with one analogy that maps onto the mechanism (my analogy preference: ${JSON.stringify(session.settings.analogy)}), and say where the analogy stops fitting`
+            : "with one concrete worked example using specific numbers or cases";
+    void sendToGo(
+      `Rebuild one idea in RabbitHole session ${session.id}: concept ${c.id} ("${c.label}"). I didn't follow its explanation. Explain it again ${how}. Retrieve GetSession and that concept's evidence via captureIds. Start with a one-sentence claim, then why the idea is needed, then the mechanism. Keep every other concept, edge, study item and ID unchanged. Save with intent "rebuild" and processedCaptureIds [] after ValidateSessionAnalysis, using SaveValidatedAnalysis with the returned saveArguments. Do not retype the guide or invent quotations.`,
+      "rebuild",
+    );
   }
   function CaptureRow() {
     if (!session) return null;
@@ -756,14 +871,33 @@ function App() {
           Follow a question. Keep the useful finds and come back able to explain
           how they connect.
         </p>
-        <label htmlFor="curiosity">What are you curious about?</label>
+        <label htmlFor="curiosity">What are you trying to figure out?</label>
         <input
           id="curiosity"
           value={curiosity}
           maxLength={140}
           onChange={(e) => setCuriosity(e.target.value)}
-          placeholder="Optional research question"
+          placeholder="Optional. Go aims the summary at this question."
         />
+        <div
+          className="familiar-chips"
+          role="group"
+          aria-label="How much do you know already?"
+        >
+          {[
+            ["new", "New to this"],
+            ["some", "Know some"],
+            ["solid", "Know it well"],
+          ].map(([value, name]) => (
+            <button
+              key={value}
+              aria-pressed={familiarity === value}
+              onClick={() => setFamiliarity(familiarity === value ? "" : value)}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
         <Button
           primary
           className="btn-lg"
@@ -978,7 +1112,11 @@ function App() {
                   </span>
                 </div>
                 <p className="surface">Started {time(session.createdAt)}</p>
-                <Trail session={session} queue={state.queue} />
+                <Trail
+                  session={session}
+                  queue={state.queue}
+                  onAction={(kind, c) => void captureAction(kind, c)}
+                />
                 {!session.captures.length && (
                   <p className="muted">
                     Search a question or read a page on your included tab. Your
@@ -1060,6 +1198,7 @@ function App() {
                           setPracticeEdge("quick");
                           setView("practice");
                         }}
+                        onExport={exported}
                         onWalk={() => {
                           setMapRequest({ walk: true });
                           setView("map");
@@ -1074,6 +1213,7 @@ function App() {
                         selected={selected}
                         onSelect={setSelected}
                         onRebuild={rebuild}
+                        onExplain={explainAgain}
                         onPractice={(id) => {
                           setPracticeEdge(id || undefined);
                           setView("practice");
@@ -1106,7 +1246,41 @@ function App() {
                             <span>{session.captures.length} deep</span>
                           </div>
                           {CaptureRow()}
-                          <Trail session={session} queue={state.queue} wide />
+                          {picked.size > 0 && (
+                            <div className="bulk-bar" role="toolbar">
+                              <span className="grow">
+                                {picked.size} selected
+                              </span>
+                              <Button onClick={() => void bulk("hide")}>
+                                Hide from map
+                              </Button>
+                              <Button
+                                className="danger"
+                                onClick={() => void bulk("delete")}
+                              >
+                                Delete
+                              </Button>
+                              <Button
+                                quiet
+                                onClick={() => setPicked(new Set())}
+                              >
+                                Clear
+                              </Button>
+                            </div>
+                          )}
+                          <Trail
+                            session={session}
+                            queue={state.queue}
+                            wide
+                            onAction={(kind, c) => void captureAction(kind, c)}
+                            selected={picked}
+                            onSelect={(id, on) => {
+                              const next = new Set(picked);
+                              if (on) next.add(id);
+                              else next.delete(id);
+                              setPicked(next);
+                            }}
+                          />
                           <Excluded
                             urls={excluded}
                             onInclude={(url) =>
@@ -1249,6 +1423,16 @@ function App() {
                   Alt+Shift+H saves selected text. On Mac, Alt is Option.
                   Reassign these at chrome://extensions/shortcuts if needed.
                 </p>
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={context?.askOnSearch !== false}
+                    onChange={(e) =>
+                      void action("ask-on-search", { value: e.target.checked })
+                    }
+                  />
+                  Offer to start a rabbit hole when I search Google
+                </label>
                 {session && (
                   <Button
                     quiet
@@ -1402,7 +1586,21 @@ function App() {
                     <Button onClick={() => patch({ status: "finished" })}>
                       Finish session
                     </Button>
-                    <Button onClick={exported}>Export JSON</Button>
+                    <Button onClick={() => exported("json")}>
+                      Export JSON
+                    </Button>
+                  </div>
+                  <h2 className="export-heading">
+                    Take it to your study tools
+                  </h2>
+                  <div className="settings-actions">
+                    <Button onClick={() => exported("anki")}>Anki (CSV)</Button>
+                    <Button onClick={() => exported("quizlet")}>
+                      Copy for Quizlet
+                    </Button>
+                    <Button onClick={() => exported("markdown")}>
+                      Markdown / Obsidian
+                    </Button>
                     <Button
                       className="danger"
                       onClick={() => {

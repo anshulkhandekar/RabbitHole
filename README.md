@@ -4,7 +4,7 @@
 
 RabbitHole captures an explicitly enabled browsing session, then lets a Superhuman Go agent turn its actual sources into a concept map and recall activities. The Chrome extension handles collection and study mechanics. Go owns the generative reasoning. An authenticated backend stores and validates the results; no separate LLM API key is required.
 
-**Stage 1 checkpoint — October 24, 2026.** Capture, quiet reading, guided maps, quiz/matching, durable hosting and the Go integration are implemented. Genuine generation, incremental merging and a rich explicit rebuild have been verified. Further user fixes, content-quality work and final competition rehearsal remain. Start with the [checkpoint](docs/stage-1.md), [next-chat handoff](docs/handoff.md), [current status](docs/status.md), and [maintenance guide](docs/maintenance.md).
+**Stage 3 test build — October 27, 2026.** Search cards, source controls, richer explanations, confidence/hints, and exports are implemented, with fixes for source removal, offline deletion recovery, keyboard submission, and map resizing. Start with the [current test-build guide](docs/stage-3-ready.md) for installation, verification, and the remaining live backend/Go update. Earlier checkpoints remain in [Stage 1](docs/stage-1.md) and the [handoff](docs/handoff.md).
 
 ## Quick start
 
@@ -37,6 +37,8 @@ npm run lint          # formatter check
 npx playwright install chromium
 npm run test:browser  # isolated extension harness, synthetic pages and saved analysis
 npm run test:reload   # actual runtime-invalidation cleanup in a disposable profile
+npm run test:stage3   # new search/source/practice/export user flow and deletion recovery
+npm run test:release  # all of the above, including build and formatting
 ```
 
 For an existing Chromium install, set `CHROMIUM_PATH` to its executable; see [maintenance](docs/maintenance.md) for the verified local path. Generated screenshots go in ignored `test-results/` and are not retained as repository documentation. Browser tests copy the built extension into a temporary profile and pregrant hosts in a test-only manifest, since native permission dialogs cannot be reliably automated headlessly. They never modify the production manifest and never present fixtures as Go output. Production builds contain no fixture analysis or seeded study results.

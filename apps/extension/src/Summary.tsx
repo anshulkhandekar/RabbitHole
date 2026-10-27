@@ -1,7 +1,9 @@
 import React from "react";
 import type { Session } from "../../../packages/contracts/src/index";
-import { deriveMemory } from "./practice-model";
+import { deriveFlags, deriveMemory } from "./practice-model";
+import { googleSearchUrl } from "./ui-model";
 import { mergeEdges } from "./map-layout";
+import { Icon } from "./Icon";
 import { Button } from "./components";
 import { routeIds, takeaways } from "./summary-model";
 export function Summary({
@@ -9,11 +11,13 @@ export function Summary({
   onMap,
   onPractice,
   onWalk,
+  onExport,
 }: {
   session: Session;
   onMap: (id?: string, memory?: boolean) => void;
   onPractice: () => void;
   onWalk: () => void;
+  onExport?: (format: string) => void;
 }) {
   const a = session.analysis;
   if (!a)
@@ -24,7 +28,9 @@ export function Summary({
       </section>
     );
   const memory = deriveMemory(a, session.attempts),
-    shaky = a.concepts.filter((c) => memory[c.id] === "shaky");
+    flags = deriveFlags(a, session.attempts),
+    shaky = a.concepts.filter((c) => memory[c.id] === "shaky"),
+    confident = a.concepts.filter((c) => flags[c.id] === "misconception");
   const route = routeIds(a),
     gaps = a.concepts.filter((c) => c.gap);
   return (
@@ -35,6 +41,11 @@ export function Summary({
           {new Date(session.analyzedAt ?? session.updatedAt).toLocaleString()}
         </p>
         <h1>{session.title}</h1>
+        {session.goal && session.goal !== session.title && (
+          <p className="summary-goal">
+            <b>Your question</b> {session.goal}
+          </p>
+        )}
         <p className="summary-lede">
           {a.summary ??
             a.overview?.summary ??
@@ -75,17 +86,61 @@ export function Summary({
         <Button onClick={onWalk} disabled={!route.length}>
           Walk it on the map
         </Button>
+        {gaps.length > 0 && (
+          <>
+            <h2 className="summary-gaps-heading">
+              What your sources didn’t answer
+            </h2>
+            <ul className="summary-gaps">
+              {gaps.map((c) => (
+                <li key={c.id}>
+                  <button className="text-button" onClick={() => onMap(c.id)}>
+                    {c.label}
+                  </button>
+                  <p>{c.gap}</p>
+                  {c.nextSearch && (
+                    <a
+                      className="search-chip"
+                      href={googleSearchUrl(c.nextSearch)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <Icon name="search" size={14} />
+                      Search: {c.nextSearch}
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
         <div className="summary-next">
           <div>
             <b>
-              {shaky.length
-                ? `${shaky.length} ideas are getting shaky`
-                : "Keep these ideas bright"}
+              {confident.length
+                ? `${confident.length} confident ${confident.length === 1 ? "miss" : "misses"} to fix first`
+                : shaky.length
+                  ? `${shaky.length} ideas are getting shaky`
+                  : "Keep these ideas bright"}
             </b>
             <span>A quick dig takes about 4 minutes</span>
           </div>
           <Button onClick={onPractice}>Start a quick dig</Button>
         </div>
+        {onExport && (
+          <div className="summary-export">
+            <span>Take it with you</span>
+            <Button quiet onClick={() => onExport("anki")}>
+              Anki
+            </Button>
+            <Button quiet onClick={() => onExport("quizlet")}>
+              Quizlet
+            </Button>
+            <Button quiet onClick={() => onExport("markdown")}>
+              Markdown
+            </Button>
+          </div>
+        )}
         {/invest|tax|dividend|portfolio/i.test(session.title) && (
           <p className="disclaimer">
             Not personalized investment or tax advice.

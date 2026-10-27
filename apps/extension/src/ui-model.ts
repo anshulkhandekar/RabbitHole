@@ -1,7 +1,9 @@
 import type {
   AnalysisData,
   CaptureData,
+  Session,
 } from "../../../packages/contracts/src/index";
+import { visibleCaptureIds } from "../../../packages/contracts/src/sources";
 export function chronological(captures: CaptureData[]) {
   return [...captures].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 }
@@ -36,3 +38,12 @@ export const domain = (url: string) => {
 };
 export const time = (s: string) =>
   new Date(s).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+export const googleSearchUrl = (q: string) =>
+  "https://www.google.com/search?q=" + encodeURIComponent(q);
+// Evidence the user still keeps: hidden or deleted sources drop out of view.
+export function visibleEvidence(
+  session: Pick<Session, "captures" | "hidden" | "removed">,
+  ids: string[],
+) {
+  return visibleCaptureIds(session, ids);
+}

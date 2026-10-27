@@ -5,6 +5,9 @@ import {
 } from "../../../packages/contracts/src/index";
 import type { Handoff } from "./handoff";
 import { googleQuery } from "./google";
+import { isExcluded, looksUnrelated, siteKey } from "./exclusion";
+import { visibleAnalysis } from "../../../packages/contracts/src/sources";
+type Offer = { query: string; at: number; kind: string };
 type Local = {
   sessions: Record<string, Session>;
   active?: string;
@@ -18,11 +21,20 @@ type Local = {
   readingMode?: boolean;
   handoffs?: Record<string, Handoff>;
   widgetPosition?: { x: number; y: number };
+  askOnSearch?: boolean;
+  // Tab-scoped like bindings: cleared on browser restart.
+  offers: Record<string, Offer>;
+  hush: Record<string, number>;
+  // Content hashes, scoped to a session and page; never retain deleted source text.
+  dismissed: Record<string, Record<string, string[]>>;
 };
 const initial: Local = {
   sessions: {},
   tabs: {},
   lastCapture: {},
+  offers: {},
+  hush: {},
+  dismissed: {},
   excluded: {},
   queue: [],
   config: {
@@ -40,9 +52,13 @@ const load = async (): Promise<Local> => {
         tabs: Record<string, string>;
         lastCapture: Record<string, string>;
         searchSession?: string;
+        offers?: Record<string, Offer>;
+        hush?: Record<string, number>;
       }
     | undefined;
   state.tabs = bindings?.tabs ?? {};
+  state.offers = bindings?.offers ?? {};
+  state.hush = bindings?.hush ?? {};
   state.lastCapture = bindings?.lastCapture ?? {};
   state.searchSession = bindings?.searchSession;
   for (const handoff of Object.values(state.handoffs ?? {}))
@@ -66,20 +82,22 @@ const load = async (): Promise<Local> => {
       bindings: { tabs: {}, lastCapture: {} },
     });
     await chrome.storage.local.set({
-      state: { ...state, tabs: {}, lastCapture: {} },
+      state: { ...state, tabs: {}, lastCapture: {}, offers: {}, hush: {} },
     });
   }
   return state;
 };
 const persist = async (s: Local) => {
   await chrome.storage.local.set({
-    state: { ...s, tabs: {}, lastCapture: {} },
+    state: { ...s, tabs: {}, lastCapture: {}, offers: {}, hush: {} },
   });
   await chrome.storage.session.set({
     bindings: {
       tabs: s.tabs,
       lastCapture: s.lastCapture,
       searchSession: s.searchSession,
+      offers: s.offers,
+      hush: s.hush,
     },
   });
 };
@@ -104,9 +122,115 @@ function enrollSearch(s: Local, tab?: chrome.tabs.Tab) {
     s.searchSession === session.id &&
     /^https?:/.test(tab.url ?? "") &&
     googleQuery(tab.url!) &&
-    !s.excluded[session.id]?.includes(tab.url!)
+    !isExcluded(s.excluded[session.id], tab.url!)
   )
     s.tabs[tab.id] = session.id;
+}
+function createSession(
+  s: Local,
+  input: { title?: unknown; goal?: unknown; familiarity?: unknown },
+) {
+  if (s.active && s.sessions[s.active]?.status === "active") {
+    s.sessions[s.active].status = "paused";
+    enqueue(s, "PATCH", `/api/sessions/${s.active}`, { status: "paused" });
+  }
+  const now = new Date().toISOString();
+  const id = crypto.randomUUID();
+  const goal = String(input.goal ?? "")
+      .trim()
+      .slice(0, 300),
+    familiarity = ["new", "some", "solid"].includes(String(input.familiarity))
+      ? (input.familiarity as Session["familiarity"])
+      : undefined;
+  const session: Session = {
+    id,
+    title:
+      String(input.title ?? "")
+        .trim()
+        .slice(0, 140) || "New rabbit hole",
+    ...(goal && { goal }),
+    ...(familiarity && { familiarity }),
+    status: "active",
+    createdAt: now,
+    updatedAt: now,
+    version: 0,
+    settings: Preferences.parse({}),
+    analysis: null,
+    processed: [],
+    captures: [],
+    attempts: [],
+  };
+  s.sessions[id] = session;
+  s.active = id;
+  s.searchSession = id;
+  s.readingMode = true;
+  enqueue(s, "POST", "/api/sessions", {
+    id,
+    title: session.title,
+    settings: session.settings,
+    ...(goal && { goal }),
+    ...(familiarity && { familiarity }),
+  });
+  return session;
+}
+async function captureFingerprint(c: { sourceType: string; text: string }) {
+  const bytes = new TextEncoder().encode(
+    JSON.stringify([c.sourceType, c.text]),
+  );
+  const hash = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(hash), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
+}
+async function removeCapture(s: Local, session: Session, captureId: string) {
+  const path = `/api/sessions/${session.id}/captures/${captureId}`;
+  const c = session.captures.find((x) => x.id === captureId);
+  if (c) {
+    const pages = (s.dismissed[session.id] ??= {});
+    pages[c.url] = [
+      ...new Set([...(pages[c.url] ?? []), await captureFingerprint(c)]),
+    ];
+  }
+  session.captures = session.captures.filter((x) => x.id !== captureId);
+  session.processed = session.processed.filter((x) => x !== captureId);
+  session.hidden = (session.hidden ?? []).filter((x) => x !== captureId);
+  session.removed = [...(session.removed ?? []), captureId];
+  session.analysis = visibleAnalysis({ ...session, hidden: [] });
+  s.queue = s.queue.filter(
+    (q) =>
+      q.path !== path &&
+      !(
+        q.method === "POST" &&
+        q.path === `/api/sessions/${session.id}/captures` &&
+        (q.body as any)?.id === captureId
+      ),
+  );
+  // A queued POST may already have committed remotely before its response failed.
+  enqueue(s, "DELETE", path);
+  for (const [tab, last] of Object.entries(s.lastCapture))
+    if (last === captureId) delete s.lastCapture[tab];
+}
+// Decide whether a Google search on this tab deserves a "start a rabbit hole?" card.
+function searchOffer(s: Local, tab: chrome.tabs.Tab, query: string) {
+  const id = String(tab.id),
+    session = s.active ? s.sessions[s.active] : undefined;
+  if (s.askOnSearch === false || (s.hush[id] ?? 0) > Date.now()) return null;
+  if (session && isExcluded(s.excluded[session.id], tab.url ?? "")) return null;
+  if (s.offers[id]?.query === query) return null;
+  let kind: string | null = null;
+  if (session?.status === "active" && s.tabs[id] === session.id) {
+    const seen = [
+      session.goal ?? "",
+      ...session.captures
+        .filter((c) => c.sourceType === "search")
+        .map((c) => c.text),
+    ].filter((t) => t && t !== query);
+    if (seen.length && looksUnrelated(query, seen)) kind = "switch";
+  } else if (session?.status === "active") kind = "add";
+  else kind = session?.status === "paused" ? "resume" : "start";
+  if (!kind) return null;
+  s.offers[id] = { query, at: Date.now(), kind };
+  return { kind, query, title: session?.title };
 }
 async function flush(s: Local) {
   if (!s.config.token) {
@@ -242,25 +366,36 @@ chrome.tabs.onRemoved.addListener(
       delete s.lastCapture[id];
     }),
 );
-async function capture(s: Local, payload: unknown, tabId: number) {
+async function capture(
+  s: Local,
+  payload: unknown,
+  tabId: number,
+  automatic = false,
+) {
   const session = s.active ? s.sessions[s.active] : undefined;
   if (!session || session.status !== "active" || s.tabs[tabId] !== session.id)
     return { ignored: true };
   const parsed = Capture.parse(payload);
   if (
     parsed.sessionId !== session.id ||
-    s.excluded[session.id]?.includes(parsed.url)
+    isExcluded(s.excluded[session.id], parsed.url)
   )
     return { ignored: true };
   if (parsed.sourceType === "article" && !session.settings.articleCapture)
+    return { ignored: true };
+  if (
+    (parsed.sourceType !== "highlight" || automatic) &&
+    s.dismissed[session.id]?.[parsed.url]?.includes(
+      await captureFingerprint(parsed),
+    )
+  )
     return { ignored: true };
   if (
     session.captures.some(
       (c) =>
         c.sourceType === parsed.sourceType &&
         c.url === parsed.url &&
-        c.text === parsed.text &&
-        c.tag === parsed.tag,
+        c.text === parsed.text,
     )
   )
     return { duplicate: true };
@@ -302,7 +437,7 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
         !/^https?:/.test(sender.tab?.url ?? "") ||
         (sender.frameId ?? 0) !== 0 ||
         !session ||
-        s.excluded[session.id]?.includes(sender.tab!.url ?? "")
+        isExcluded(s.excluded[session.id], sender.tab!.url ?? "")
       )
         return null;
       return {
@@ -313,7 +448,10 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
             ? session.settings
             : { articleCapture: false, autoHighlights: false },
         excluded:
-          s.tabs[id] === session.id ? (s.excluded[session.id] ?? []) : [],
+          s.tabs[id] === session.id &&
+          isExcluded(s.excluded[session.id], sender.tab!.url ?? "")
+            ? [sender.tab!.url]
+            : [],
         readingMode: s.readingMode ?? false,
         included: s.tabs[id] === session.id,
         widgetPosition: s.widgetPosition,
@@ -371,9 +509,71 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
         ? {
             id: session.id,
             settings: session.settings,
-            excluded: s.excluded[session.id] ?? [],
+            excluded: isExcluded(s.excluded[session.id], sender.tab!.url ?? "")
+              ? [sender.tab!.url]
+              : [],
           }
         : null;
+    }
+    if (msg.type === "search-offer" || msg.type === "search-accept") {
+      const tab = sender.tab,
+        query = googleQuery(tab?.url ?? "");
+      if (
+        tab?.id === undefined ||
+        tab.incognito ||
+        (sender.frameId ?? 0) !== 0 ||
+        sender.url !== tab.url ||
+        !query
+      )
+        return null;
+      if (msg.type === "search-offer") return searchOffer(s, tab, query);
+      const id = String(tab.id),
+        offer = s.offers[id];
+      // Only answer a card this worker actually showed for the current search.
+      if (
+        !offer ||
+        offer.query !== query ||
+        Date.now() - offer.at > 15 * 60_000
+      )
+        throw new Error(
+          "This suggestion expired. Use RabbitHole's side panel.",
+        );
+      if (msg.choice === "hush") s.hush[id] = Date.now() + 30 * 60_000;
+      else if (msg.choice === "never") s.askOnSearch = false;
+      else if (msg.choice === "start") {
+        const old = s.active ? s.sessions[s.active] : undefined;
+        // A search that started a new topic moves out of the old rabbit hole.
+        const moved =
+          offer.kind === "switch" &&
+          old?.captures.find(
+            (c) =>
+              c.sourceType === "search" &&
+              c.text === query &&
+              c.url === tab.url &&
+              !old.processed.includes(c.id),
+          );
+        if (old && moved) await removeCapture(s, old, moved.id);
+        delete s.lastCapture[id];
+        createSession(s, {
+          title: query,
+          goal: msg.goal,
+          familiarity: msg.familiarity,
+        });
+        s.tabs[id] = s.active!;
+      } else if (msg.choice === "add" && s.active) {
+        const session = s.sessions[s.active];
+        if (session.status !== "active") {
+          session.status = "active";
+          enqueue(s, "PATCH", `/api/sessions/${session.id}`, {
+            status: "active",
+          });
+        }
+        s.tabs[id] = session.id;
+        s.searchSession = session.id;
+      } else throw new Error("Unknown choice");
+      await persist(s);
+      await flush(s);
+      return { saved: true, choice: msg.choice };
     }
     if (
       msg.type === "capture" &&
@@ -385,7 +585,7 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
         throw new Error("Capture origin mismatch");
       if (msg.automatic && !s.sessions[s.active ?? ""]?.settings.autoHighlights)
         return { ignored: true };
-      return capture(s, msg.capture, sender.tab.id);
+      return capture(s, msg.capture, sender.tab.id, !!msg.automatic);
     }
     if (!internal)
       throw new Error("This operation is available only in RabbitHole");
@@ -402,8 +602,8 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
         ...startContext(tab),
         included: tab?.id !== undefined && s.tabs[tab.id] === s.active,
         count: Object.values(s.tabs).filter((id) => id === s.active).length,
-        excluded:
-          !!tab?.url && (s.excluded[s.active ?? ""] ?? []).includes(tab.url),
+        excluded: !!tab?.url && isExcluded(s.excluded[s.active ?? ""], tab.url),
+        askOnSearch: s.askOnSearch !== false,
       };
     }
     if (msg.type === "reading-mode") {
@@ -456,7 +656,11 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
             (msg.intent === "rebuild"
               ? []
               : session.captures
-                  .filter((c) => !session.processed.includes(c.id))
+                  .filter(
+                    (c) =>
+                      !session.processed.includes(c.id) &&
+                      !session.hidden?.includes(c.id),
+                  )
                   .slice(0, 24)
                   .map((c) => c.id)),
           startedAt: previous?.startedAt ?? new Date().toISOString(),
@@ -492,38 +696,8 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       const context = startContext(tab);
       if (!context.canStart || sender.tab?.incognito)
         throw new Error("Open a regular research webpage first");
-      if (s.active && s.sessions[s.active]?.status === "active") {
-        s.sessions[s.active].status = "paused";
-        enqueue(s, "PATCH", `/api/sessions/${s.active}`, { status: "paused" });
-      }
-      const now = new Date().toISOString();
-      const id = crypto.randomUUID();
-      const session: Session = {
-        id,
-        title:
-          String(msg.title ?? "")
-            .trim()
-            .slice(0, 140) || "New rabbit hole",
-        status: "active",
-        createdAt: now,
-        updatedAt: now,
-        version: 0,
-        settings: Preferences.parse({}),
-        analysis: null,
-        processed: [],
-        captures: [],
-        attempts: [],
-      };
-      s.sessions[id] = session;
-      s.active = id;
-      s.searchSession = id;
-      s.readingMode = true;
+      const { id } = createSession(s, msg);
       if (context.regular) s.tabs[tab!.id!] = id;
-      enqueue(s, "POST", "/api/sessions", {
-        id,
-        title: session.title,
-        settings: session.settings,
-      });
       await persist(s);
       await register();
       if (context.regular)
@@ -546,11 +720,15 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
         throw new Error("Open a research webpage first");
       s.tabs[tab.id] = s.active;
       s.searchSession = s.active;
+      if (s.dismissed[s.active]) delete s.dismissed[s.active][tab.url!];
       await persist(s);
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         files: ["content.js"],
       });
+      await chrome.tabs
+        .sendMessage(tab.id, { type: "reading-update", rescan: true })
+        .catch(() => {});
     }
     if (msg.type === "select") {
       if (s.active && s.active !== msg.id) {
@@ -566,16 +744,43 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       Object.assign(session, msg.patch);
       enqueue(s, "PATCH", `/api/sessions/${msg.id}`, msg.patch);
     }
-    if (msg.type === "exclude") {
-      const [tab] = await chrome.tabs.query({
-        active: true,
-        lastFocusedWindow: true,
-      });
-      if (s.active && tab?.url) {
+    if (msg.type === "exclude" || msg.type === "exclude-site") {
+      const [tab] = msg.url
+        ? [{ url: String(msg.url) }]
+        : await chrome.tabs.query({
+            active: true,
+            lastFocusedWindow: true,
+          });
+      const entry =
+        tab?.url && (msg.type === "exclude-site" ? siteKey(tab.url) : tab.url);
+      if (s.active && entry) {
         s.excluded[s.active] = [
-          ...new Set([...(s.excluded[s.active] ?? []), tab.url]),
+          ...new Set([...(s.excluded[s.active] ?? []), entry]),
         ];
       }
+    }
+    if (msg.type === "ask-on-search") s.askOnSearch = !!msg.value;
+    if (
+      msg.type === "capture-hide" ||
+      msg.type === "capture-tag" ||
+      msg.type === "capture-delete"
+    ) {
+      const session = s.sessions[msg.id],
+        c = session?.captures.find((c) => c.id === msg.captureId);
+      if (!session || !c) throw new Error("That find no longer exists");
+      const path = `/api/sessions/${session.id}/captures/${c.id}`;
+      if (msg.type === "capture-hide") {
+        session.hidden = msg.hidden
+          ? [...new Set([...(session.hidden ?? []), c.id])]
+          : (session.hidden ?? []).filter((h) => h !== c.id);
+        enqueue(s, "PATCH", path, { hidden: !!msg.hidden });
+      } else if (msg.type === "capture-tag") {
+        if (!["important", "confusing", "none"].includes(msg.tag))
+          throw new Error("Unknown tag");
+        c.tag = msg.tag;
+        enqueue(s, "PATCH", path, { tag: msg.tag });
+      } else await removeCapture(s, session, c.id);
+      await persist(s);
     }
     if (msg.type === "unexclude" && s.active) {
       s.excluded[s.active] = (s.excluded[s.active] ?? []).filter(
@@ -593,6 +798,7 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       for (const id of Object.keys(s.tabs))
         if (s.tabs[id] === msg.id) delete s.tabs[id];
       delete s.excluded[msg.id];
+      delete s.dismissed[msg.id];
       enqueue(s, "DELETE", `/api/sessions/${msg.id}`);
       await persist(s);
     }
@@ -604,9 +810,14 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       enqueue(s, "POST", `/api/sessions/${msg.id}/reviews`, msg.attempt);
     }
     if (
-      ["patch", "exclude", "unexclude", "reading-mode", "select"].includes(
-        msg.type,
-      )
+      [
+        "patch",
+        "exclude",
+        "exclude-site",
+        "unexclude",
+        "reading-mode",
+        "select",
+      ].includes(msg.type)
     )
       for (const id of Object.keys(s.tabs))
         void chrome.tabs
@@ -638,10 +849,25 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
           if (!detail.ok) continue;
           const remote: Session = await detail.json(),
             local = s.sessions[brief.id];
+          if (
+            local &&
+            s.queue.some((q) =>
+              q.path.startsWith(`/api/sessions/${local.id}/captures/`),
+            )
+          ) {
+            // Unsynced hide/tag/delete changes win over the server's copy.
+            remote.hidden = local.hidden;
+            remote.removed = local.removed;
+            remote.captures = remote.captures
+              .filter((c) => !local.removed?.includes(c.id))
+              .map((c) => local.captures.find((l) => l.id === c.id) ?? c);
+          }
           if (local) {
             remote.captures.push(
               ...local.captures.filter(
-                (c) => !remote.captures.some((rc) => rc.id === c.id),
+                (c) =>
+                  !remote.captures.some((rc) => rc.id === c.id) &&
+                  !remote.removed?.includes(c.id),
               ),
             );
             remote.attempts.push(

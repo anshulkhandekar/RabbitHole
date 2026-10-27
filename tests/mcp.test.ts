@@ -26,7 +26,7 @@ test("authenticated API and official MCP client complete read → validated writ
       404,
     );
     await client.connect(
-      new StreamableHTTPClientTransport(new URL(url + "/mcp?schema=2"), {
+      new StreamableHTTPClientTransport(new URL(url + "/mcp?schema=5"), {
         requestInit: { headers: { Authorization: "Bearer " + token } },
       }),
     );
@@ -51,6 +51,17 @@ test("authenticated API and official MCP client complete read → validated writ
     assert.ok(input.studyItems.items.properties.type.enum.includes("matching"));
     assert.ok(input.studyItems.items.properties.pairs);
     assert.ok(input.studyItems.items.properties.choiceExplanations);
+    for (const field of ["claim", "why", "steps", "buildsOn", "nextSearch"])
+      assert.ok(
+        input.concepts.items.properties[field],
+        `discoverable concept field: ${field}`,
+      );
+    for (const field of ["hints", "variantOf"])
+      assert.ok(
+        input.studyItems.items.properties[field],
+        `discoverable practice field: ${field}`,
+      );
+    assert.match(tools.tools[1].description!, /removedCaptureIds/);
     const read = await client.callTool({
       name: "GetSession",
       arguments: { sessionId: "s1" },

@@ -14,9 +14,11 @@ npm run lint
 npx coda validate integrations/superhuman/pack.ts
 npm run test:browser
 npm run test:reload
+npm run test:stage3
+npm run test:release
 ```
 
-The first command runs 32 focused tests, TypeScript and the production build at Stage 1. Browser harnesses need Playwright Chromium or an explicit executable path. On this Mac the previously verified invocation is:
+The current check command runs 87 unit tests, TypeScript and the production build. `test:release` also runs formatting and all three isolated browser suites. Browser harnesses need Playwright Chromium or an explicit executable path. On this Mac the previously verified invocation is:
 
 ```sh
 CHROMIUM_PATH='/Users/anshulkhandekar/Library/Caches/ms-playwright/chromium-1223/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing' npm run test:browser

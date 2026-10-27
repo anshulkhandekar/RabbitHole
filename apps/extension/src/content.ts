@@ -2,6 +2,7 @@ import { Readability } from "@mozilla/readability";
 import { googleQuery, overview } from "./google";
 import { readSelection } from "./selection";
 import readingCSS from "./styles/reading.css";
+import offerCSS from "./styles/offer.css";
 declare const __RABBIT_TOKENS__: string;
 (() => {
   const key = "__rabbitHoleInstalled";
@@ -24,6 +25,8 @@ declare const __RABBIT_TOKENS__: string;
     events.abort();
     indicator?.remove();
     indicator = undefined;
+    offerHost?.remove();
+    offerHost = undefined;
     try {
       chrome.runtime.onMessage.removeListener(onMessage);
     } catch {
@@ -112,6 +115,19 @@ declare const __RABBIT_TOKENS__: string;
     context = await message({ type: "reading-context" });
     if (stopped) return;
     updateIndicator();
+    if (document.visibilityState !== "visible") return;
+    if (lastUrl !== location.href) {
+      lastUrl = location.href;
+      lastArticle = "";
+    }
+    const q = googleQuery(location.href);
+    if (q && lastOffer !== location.href) {
+      lastOffer = location.href;
+      const offer = await message({ type: "search-offer" });
+      if (stopped) return;
+      if (offer?.kind) showOffer(offer);
+      else hideOffer();
+    }
     if (
       !context ||
       context.included === false ||
@@ -119,11 +135,6 @@ declare const __RABBIT_TOKENS__: string;
       document.visibilityState !== "visible"
     )
       return;
-    if (lastUrl !== location.href) {
-      lastUrl = location.href;
-      lastArticle = "";
-    }
-    const q = googleQuery(location.href);
     if (q) {
       await send("search", q);
       const ai = overview(document);
@@ -170,6 +181,7 @@ declare const __RABBIT_TOKENS__: string;
   >[0] = (msg, _sender, reply) => {
     if (stopped) return;
     if (msg.type === "reading-update") {
+      if (msg.rescan) lastArticle = "";
       schedule();
       return;
     }
@@ -254,6 +266,169 @@ declare const __RABBIT_TOKENS__: string;
     },
     { signal: events.signal },
   );
+  let offerHost: HTMLElement | undefined,
+    lastOffer = "";
+  function shadowStyle(css: string) {
+    const style = document.createElement("style");
+    style.textContent =
+      __RABBIT_TOKENS__
+        .replaceAll(
+          ':root:not([data-theme="light"])',
+          ':host(:not([data-theme="light"]))',
+        )
+        .replaceAll(':root[data-theme="dark"]', ':host([data-theme="dark"])')
+        .replaceAll(":root", ":host") + css;
+    return style;
+  }
+  function hideOffer() {
+    offerHost?.remove();
+    offerHost = undefined;
+  }
+  // A card on Google results offering to start or join a rabbit hole. It never
+  // captures anything by itself; only a trusted click on its buttons does.
+  function showOffer(offer: { kind: string; query: string; title?: string }) {
+    hideOffer();
+    let image = "";
+    try {
+      image = chrome.runtime.getURL("rabbithole-mark.svg");
+    } catch {
+      stop();
+      return;
+    }
+    offerHost = document.createElement("div");
+    offerHost.dataset.rabbitholeReading = "true";
+    if (context?.theme === "light" || context?.theme === "dark")
+      offerHost.dataset.theme = context.theme;
+    const shadow = offerHost.attachShadow({ mode: "closed" }),
+      card = document.createElement("section");
+    card.className = "offer";
+    card.setAttribute("role", "dialog");
+    card.setAttribute("aria-label", "RabbitHole suggestion");
+    const el = (tag: string, cls: string, text = "") => {
+      const node = document.createElement(tag);
+      if (cls) node.className = cls;
+      node.textContent = text;
+      return node;
+    };
+    const head = el("div", "head"),
+      mark = document.createElement("img"),
+      copy = el("div", "");
+    mark.src = image;
+    mark.alt = "";
+    const short = (t = "") => (t.length > 48 ? t.slice(0, 47) + "…" : t);
+    const fresh = offer.kind === "start" || offer.kind === "switch";
+    copy.append(
+      el(
+        "p",
+        "title",
+        offer.kind === "switch"
+          ? "New topic? Start a new rabbit hole"
+          : offer.kind === "start"
+            ? `Start a rabbit hole for “${short(offer.query)}”?`
+            : `Add this search to “${short(offer.title)}”?`,
+      ),
+      el(
+        "p",
+        "sub",
+        offer.kind === "switch"
+          ? `“${short(offer.query)}” doesn’t match “${short(offer.title)}”.`
+          : offer.kind === "start"
+            ? "RabbitHole saves this search and the pages you open from it."
+            : offer.kind === "resume"
+              ? "That rabbit hole is paused. Adding resumes it on this tab."
+              : "This tab isn’t part of your rabbit hole yet.",
+      ),
+    );
+    head.append(mark, copy);
+    card.append(head);
+    let goal: HTMLInputElement | undefined,
+      familiarity = "";
+    if (fresh) {
+      goal = document.createElement("input");
+      goal.maxLength = 300;
+      goal.placeholder = "What are you trying to figure out? (optional)";
+      goal.setAttribute("aria-label", "What are you trying to figure out?");
+      const row = el("div", "familiar");
+      row.setAttribute("role", "group");
+      row.setAttribute("aria-label", "How much do you know already?");
+      for (const [value, label] of [
+        ["new", "New to this"],
+        ["some", "Know some"],
+        ["solid", "Know it well"],
+      ]) {
+        const b = el("button", "", label);
+        b.setAttribute("aria-pressed", "false");
+        b.addEventListener("click", (e) => {
+          if (!e.isTrusted) return;
+          familiarity = familiarity === value ? "" : value;
+          row
+            .querySelectorAll("button")
+            .forEach((x) =>
+              x.setAttribute("aria-pressed", String(x === b && !!familiarity)),
+            );
+        });
+        row.append(b);
+      }
+      card.append(goal, row);
+    }
+    const actions = el("div", "actions"),
+      error = el("p", "error");
+    let submitting = false;
+    const choose = (choice: string) => async (e: Event) => {
+      if (!e.isTrusted || submitting) return;
+      submitting = true;
+      actions.querySelectorAll("button").forEach((b) => (b.disabled = true));
+      const result = await message({
+        type: "search-accept",
+        choice,
+        goal: goal?.value.trim() || undefined,
+        familiarity: familiarity || undefined,
+      });
+      if (!result?.saved) {
+        submitting = false;
+        actions.querySelectorAll("button").forEach((b) => (b.disabled = false));
+        error.textContent =
+          result?.error ?? "Couldn’t save that choice. Try again.";
+        return;
+      }
+      hideOffer();
+      if (choice === "start" || choice === "add") {
+        lastUrl = "";
+        await scan();
+        showReadingNote(
+          choice === "start" ? "Rabbit hole started" : "Search added",
+        );
+      }
+    };
+    const button = (label: string, choice: string, cls = "") => {
+      const b = el("button", cls, label);
+      b.addEventListener("click", (e) => void choose(choice)(e));
+      actions.append(b);
+      return b;
+    };
+
+    offer.kind === "start" || offer.kind === "switch"
+      ? button(
+          offer.kind === "switch" ? "Start new" : "Start",
+          "start",
+          "primary",
+        )
+      : button(`Add to “${short(offer.title).slice(0, 22)}”`, "add", "primary");
+    if (offer.kind === "resume" || offer.kind === "add")
+      button("Start new", "start");
+    button(offer.kind === "switch" ? "Keep here" : "Not now", "hush");
+    button("Don’t ask", "never", "never");
+    card.append(actions, error);
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") hideOffer();
+      if (e.key === "Enter" && e.target === goal && !e.repeat) {
+        e.preventDefault();
+        void choose("start")(e);
+      }
+    });
+    shadow.append(shadowStyle(offerCSS), card);
+    document.documentElement.append(offerHost);
+  }
   let indicator: HTMLElement | undefined,
     noteTimer: ReturnType<typeof setTimeout> | undefined,
     selectionTimer: ReturnType<typeof setTimeout> | undefined,
@@ -274,17 +449,8 @@ declare const __RABBIT_TOKENS__: string;
       indicator.dataset.rabbitholeReading = "true";
       if (context.theme === "light" || context.theme === "dark")
         indicator.dataset.theme = context.theme;
-      const shadow = indicator.attachShadow({ mode: "open" }),
-        style = document.createElement("style");
-      style.textContent =
-        __RABBIT_TOKENS__
-          .replaceAll(
-            ':root:not([data-theme="light"])',
-            ':host(:not([data-theme="light"]))',
-          )
-          .replaceAll(':root[data-theme="dark"]', ':host([data-theme="dark"])')
-          .replaceAll(":root", ":host") + readingCSS;
-      shadow.append(style);
+      const shadow = indicator.attachShadow({ mode: "open" });
+      shadow.append(shadowStyle(readingCSS));
       const widget = document.createElement("div");
       widget.className = "reading-widget";
       const open = document.createElement("button");

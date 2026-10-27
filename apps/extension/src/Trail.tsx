@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { Session } from "../../../packages/contracts/src/index";
 import {
   chronological,
@@ -6,9 +6,94 @@ import {
   sourceKind,
   sourceVerb,
   time,
+  visibleEvidence,
 } from "./ui-model";
 import { Icon } from "./Icon";
-import { Chip, Button } from "./components";
+import { Chip, Button, IconButton } from "./components";
+import { exclusionLabel } from "./exclusion";
+export type CaptureAction =
+  | "hide"
+  | "unhide"
+  | "important"
+  | "confusing"
+  | "untag"
+  | "exclude"
+  | "exclude-site"
+  | "delete";
+type Capture = Session["captures"][number];
+function CaptureMenu({
+  capture,
+  hidden,
+  onAction,
+}: {
+  capture: Capture;
+  hidden: boolean;
+  onAction: (action: CaptureAction, capture: Capture) => void;
+}) {
+  const [open, setOpen] = useState(false),
+    anchor = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: Event) => {
+      if (!anchor.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [open]);
+  const items: [CaptureAction, string][] = [
+    hidden ? ["unhide", "Show on map again"] : ["hide", "Hide from map"],
+    ...(capture.tag !== "important"
+      ? ([["important", "Mark important"]] as [CaptureAction, string][])
+      : []),
+    ...(capture.tag !== "confusing"
+      ? ([["confusing", "Mark confusing"]] as [CaptureAction, string][])
+      : []),
+    ...(capture.tag !== "none"
+      ? ([["untag", "Clear mark"]] as [CaptureAction, string][])
+      : []),
+    ...(capture.sourceType !== "search" && capture.sourceType !== "highlight"
+      ? ([
+          ["exclude", "Never save this page"],
+          ["exclude-site", `Never save ${domain(capture.url)}`],
+        ] as [CaptureAction, string][])
+      : []),
+    ["delete", "Delete find"],
+  ];
+  return (
+    <div
+      className="stop-menu"
+      ref={anchor}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") setOpen(false);
+      }}
+    >
+      <IconButton
+        name="more"
+        label="Find actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      />
+      {open && (
+        <div className="stop-menu-list" role="menu">
+          {items.map(([action, name]) => (
+            <button
+              key={action}
+              role="menuitem"
+              className={action === "delete" ? "danger" : ""}
+              onClick={() => {
+                setOpen(false);
+                onAction(action, capture);
+              }}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 export function SourceQuote({
   session,
   id,
@@ -19,7 +104,12 @@ export function SourceQuote({
   quote?: string;
 }) {
   const capture = session.captures.find((c) => c.id === id);
-  if (!capture) return <p>Evidence unavailable for this capture.</p>;
+  if (!capture || !visibleEvidence(session, [id]).length)
+    return (
+      <p>
+        This source is hidden or removed. Rebuild with Go to update the guide.
+      </p>
+    );
   const excerpt = quote ?? capture.text.slice(0, 180);
   return (
     <blockquote
@@ -76,10 +166,16 @@ export function Trail({
   session,
   queue = [],
   wide = false,
+  onAction,
+  selected,
+  onSelect,
 }: {
   session: Session;
   queue?: { body?: any }[];
   wide?: boolean;
+  onAction?: (action: CaptureAction, capture: Capture) => void;
+  selected?: Set<string>;
+  onSelect?: (id: string, on: boolean) => void;
 }) {
   const captures = chronological(session.captures),
     previous = useRef(new Set(captures.map((c) => c.id))),
@@ -93,15 +189,28 @@ export function Trail({
     return () => clearTimeout(timer);
   }, [captures.length]);
   return (
-    <ol className="trail" aria-label="Your trail, oldest first">
+    <ol
+      className={`trail ${onSelect ? "selectable" : ""} ${onAction ? "actionable" : ""}`}
+      aria-label="Your trail, oldest first"
+    >
       {captures.map((c) => {
-        const pending = !session.processed.includes(c.id),
+        const hidden = !!session.hidden?.includes(c.id),
+          pending = !hidden && !session.processed.includes(c.id),
           local = queue.some((q) => q.body?.id === c.id);
         return (
           <li
             key={c.id}
-            className={`stop kind-${sourceKind(c)} ${c.sourceType !== "search" ? "is-child" : ""} ${pending ? "is-pending" : ""} ${c.sourceType === "highlight" ? "is-highlight" : ""} ${fresh.current.has(c.id) ? "is-new" : ""}`}
+            className={`stop kind-${sourceKind(c)} ${c.sourceType !== "search" ? "is-child" : ""} ${pending ? "is-pending" : ""} ${c.sourceType === "highlight" ? "is-highlight" : ""} ${fresh.current.has(c.id) ? "is-new" : ""} ${hidden ? "is-hidden" : ""}`}
           >
+            {onSelect && (
+              <input
+                type="checkbox"
+                className="stop-select"
+                aria-label={`Select ${c.title || c.text.slice(0, 40)}`}
+                checked={!!selected?.has(c.id)}
+                onChange={(e) => onSelect(c.id, e.target.checked)}
+              />
+            )}
             <span className="stop-node" aria-hidden="true">
               <Icon name={sourceKind(c)} size={16} />
             </span>
@@ -136,13 +245,21 @@ export function Trail({
                     Confusing
                   </Chip>
                 )}
-                {pending ? (
+                {c.tag === "important" && c.sourceType !== "highlight" && (
+                  <Chip>Important</Chip>
+                )}
+                {hidden ? (
+                  <Chip>Hidden from map</Chip>
+                ) : pending ? (
                   <Chip kind="new">{wide ? "Not on the map yet" : "New"}</Chip>
                 ) : wide ? (
                   <Chip kind="done">On the map</Chip>
                 ) : null}
                 {local && <span>Saved on this device</span>}
               </div>
+              {onAction && (
+                <CaptureMenu capture={c} hidden={hidden} onAction={onAction} />
+              )}
               {wide && c.sourceType !== "highlight" && (
                 <details className="capture-details">
                   <summary>Read captured text</summary>
@@ -190,8 +307,8 @@ export function Excluded({
         <div className="excl" key={url}>
           <Icon name="excluded" size={16} />
           <span className="grow" title={url}>
-            {domain(url)}
-            <small>{url}</small>
+            {url.startsWith("site:") ? exclusionLabel(url) : domain(url)}
+            {!url.startsWith("site:") && <small>{url}</small>}
           </span>
           <Button onClick={() => onInclude(url)}>Include again</Button>
         </div>

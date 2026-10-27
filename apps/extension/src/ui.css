@@ -2690,6 +2690,7 @@ h3 {
 }
 .v2 .topbar > .brand {
   flex: none;
+  width: auto;
 }
 .v2 .tb-title {
   display: flex;
@@ -2710,6 +2711,8 @@ h3 {
 .v2 .switcher-btn {
   align-items: center;
   padding: 6px 8px;
+  min-width: 0;
+  max-width: 100%;
 }
 .v2 .switcher-title {
   font-size: 14px;
@@ -4111,14 +4114,15 @@ h3 {
   position: relative;
 }
 .v2 .topbar > .segmented {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  position: static;
+  transform: none;
+  flex-shrink: 0;
 }
 .v2 .topbar > .tb-title {
   flex: 1;
 }
 .v2 .capture-btn {
+  flex-shrink: 0;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface);
@@ -4203,4 +4207,371 @@ h3 {
 }
 .run-options button.fade:disabled {
   opacity: 0.4;
+}
+/* Stage 3: clearer ideas */
+.drawer-body > .idea-claim,
+.tour-claim {
+  font-size: var(--t-md);
+  line-height: 1.45;
+  color: var(--ink);
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+.idea-why,
+.idea-example,
+.idea-boundary {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  background: var(--surface-sunk);
+}
+.idea-why b,
+.idea-example b,
+.idea-boundary b {
+  display: block;
+  font-size: var(--t-xs);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 3px;
+}
+.idea-why p,
+.idea-example p,
+.idea-boundary p {
+  margin: 0;
+  color: var(--ink-2);
+}
+.idea-why {
+  border-left: 3px solid var(--carrot);
+  border-radius: 4px 12px 12px 4px;
+}
+.idea-boundary {
+  background: transparent;
+  border: 1px dashed var(--line-strong);
+}
+.idea-steps {
+  counter-reset: step;
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+  display: grid;
+  gap: 0;
+}
+.idea-steps li {
+  counter-increment: step;
+  position: relative;
+  padding: 0 0 12px 34px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.idea-steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: var(--primary-soft);
+  color: var(--ink);
+}
+.idea-steps li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 10.5px;
+  top: 24px;
+  bottom: 2px;
+  width: 1px;
+  background: var(--line-strong);
+}
+.idea-takeaways {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  display: grid;
+  gap: 4px;
+}
+.idea-builds {
+  font-size: var(--t-sm);
+  color: var(--ink-3);
+  margin: 14px 0 0;
+}
+.idea-builds button {
+  font: inherit;
+  color: var(--ink);
+  border: 0;
+  padding: 0;
+  background: none;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  cursor: pointer;
+}
+.search-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--carrot);
+  color: var(--carrot-ink);
+  background: var(--surface);
+  font-size: var(--t-sm);
+  text-decoration: none;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.search-chip:hover {
+  background: var(--carrot-soft);
+}
+.explain-again {
+  margin-top: 16px;
+}
+.explain-styles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+/* Stage 3: confidence and hints */
+.confidence-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 14px;
+  font-size: var(--t-sm);
+  color: var(--ink-3);
+}
+.confidence-row span {
+  margin-right: 4px;
+}
+.confidence-row button,
+.familiar-chips button {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: var(--t-sm);
+  cursor: pointer;
+}
+.confidence-row button[aria-pressed="true"],
+.familiar-chips button[aria-pressed="true"] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+.familiar-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: 10px 0 14px;
+}
+.hint-ladder {
+  margin: 0 0 14px;
+  display: grid;
+  gap: 6px;
+  font-size: 13.5px;
+}
+.hint-ladder p {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--carrot-soft);
+  color: var(--ink);
+}
+.hint-ladder b {
+  color: var(--carrot-ink);
+  margin-right: 4px;
+}
+.hint-ladder .text-button {
+  justify-self: start;
+}
+.feedback-sheet .why-picked {
+  color: var(--ember-ink);
+}
+.feedback-sheet .answer-more {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.miss-note {
+  display: grid;
+  gap: 6px;
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+  margin: 8px 0 10px;
+}
+.miss-note textarea {
+  min-height: 52px;
+  background: var(--surface);
+}
+.confidence-summary,
+.confident-note {
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+  max-width: 520px;
+  margin: 0 auto 16px;
+}
+.confident-note {
+  margin: 0 0 10px;
+}
+.shaky-ideas.confident i {
+  background: var(--ember);
+}
+/* Stage 3: managing finds */
+.trail.actionable .stop-body {
+  padding-right: 34px;
+}
+.stop-body {
+  position: relative;
+}
+.stop-menu {
+  position: absolute;
+  top: -4px;
+  right: 0;
+}
+.stop-menu .icon-btn {
+  width: 30px;
+  height: 30px;
+  opacity: 0.55;
+}
+.stop:hover .stop-menu .icon-btn,
+.stop-menu .icon-btn:focus-visible,
+.stop-menu .icon-btn[aria-expanded="true"] {
+  opacity: 1;
+}
+.stop-menu-list {
+  position: absolute;
+  right: 0;
+  top: 32px;
+  z-index: 60;
+  width: 220px;
+  padding: 6px;
+  display: grid;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-pop);
+}
+.stop-menu-list button {
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.stop-menu-list button:hover,
+.stop-menu-list button:focus-visible {
+  background: var(--surface-sunk);
+}
+.stop-menu-list button.danger {
+  color: var(--ember-ink);
+}
+.trail.selectable .stop {
+  grid-template-columns: 22px 32px 1fr;
+}
+.stop-select {
+  align-self: start;
+  margin: 9px 0 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+.stop.is-hidden .stop-body,
+.stop.is-hidden .stop-node {
+  opacity: 0.5;
+}
+.stop.is-hidden .stop-menu {
+  opacity: 1;
+}
+.bulk-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lift);
+  font-size: var(--t-sm);
+}
+/* Stage 3: summary */
+.summary-goal {
+  margin: -4px 0 16px;
+  font-size: var(--t-base);
+  color: var(--ink-2);
+}
+.summary-goal b {
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--carrot-ink);
+}
+.summary-v2 .summary-gaps-heading {
+  margin-top: 36px;
+}
+.summary-gaps {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.summary-gaps li {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--carrot-soft);
+}
+.summary-gaps p {
+  margin: 4px 0;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+.summary-gaps .text-button {
+  font-weight: 600;
+}
+.summary-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 28px;
+  font-size: var(--t-sm);
+  color: var(--ink-3);
+}
+.summary-export span {
+  margin-right: 6px;
+}
+.export-heading {
+  font-size: var(--t-base);
+  margin: 20px 0 8px;
+}
+@media (max-width: 600px) {
+  .feedback-sheet > div {
+    padding-right: 24px;
+  }
+}
+/* Keep the React Flow credit in a corner, clear of the ideas it could cover. */
+.map-v2 .react-flow__attribution {
+  top: auto;
+  left: auto;
+  right: 14px;
+  bottom: 30px;
 }

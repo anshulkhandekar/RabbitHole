@@ -5,6 +5,11 @@ import type {
 export type StudyItem = AnalysisData["studyItems"][number];
 export type Memory = "strong" | "shaky" | "untested";
 export type Result = "right" | "wrong" | "partial";
+// Confidence changes what an outcome means: a lucky guess isn't knowledge, and a
+// confident miss is a misconception worth fixing first.
+export type Flag = "misconception" | "fragile";
+const lucky = (a: Attempt) =>
+  a.confidence === "guess" || (a.hintsUsed ?? 0) > 0;
 export function conceptsOf(item: StudyItem) {
   return [
     ...new Set([
@@ -63,19 +68,66 @@ export function deriveMemory(
         (v) => now - Date.parse(v.a.timestamp) <= 30 * 86400000,
       ),
       net = recent.reduce(
-        (n, v) => n + (attemptResult(v.item, v.a, c.id) === "right" ? 1 : -1),
+        (n, v) =>
+          n +
+          (attemptResult(v.item, v.a, c.id) === "right"
+            ? lucky(v.a)
+              ? 0
+              : 1
+            : -1),
         0,
       );
     result[c.id] =
-      attemptResult(last.item, last.a, c.id) === "right" && net > 0
+      attemptResult(last.item, last.a, c.id) === "right" &&
+      !lucky(last.a) &&
+      net > 0
         ? "strong"
         : "shaky";
   }
   return result;
 }
+export function deriveFlags(
+  analysis: AnalysisData,
+  attempts: Attempt[],
+): Record<string, Flag> {
+  const flags: Record<string, Flag> = {};
+  const sorted = [...attempts].sort((x, y) =>
+    x.timestamp.localeCompare(y.timestamp),
+  );
+  for (const a of sorted) {
+    const item = analysis.studyItems.find((i) => i.id === a.studyId);
+    if (!item) continue;
+    for (const id of conceptsOf(item)) {
+      const result = attemptResult(item, a, id);
+      if (result === "wrong" && a.confidence === "sure")
+        flags[id] = "misconception";
+      else if (result === "right" && lucky(a)) flags[id] = "fragile";
+      else if (result === "right" || result === "wrong") delete flags[id];
+    }
+  }
+  return flags;
+}
+// Variants are retry material in a fresh wording; the first run uses originals.
+export const originals = (items: StudyItem[]) =>
+  items.filter((i) => !i.variantOf);
+export function retryItems(items: StudyItem[], missed: StudyItem[]) {
+  const used = new Set(missed.map((m) => m.id));
+  return missed.map((m) => {
+    const family = m.variantOf ?? m.id;
+    const sibling = items.find(
+      (i) =>
+        !used.has(i.id) &&
+        i.type === m.type &&
+        (i.variantOf === family || (i.id === family && m.variantOf)),
+    );
+    if (sibling) used.add(sibling.id);
+    return sibling ?? m;
+  });
+}
 export function quickQueue(
   items: StudyItem[],
   memory: Record<string, Memory>,
+  flags?: Record<string, Flag>,
 ): StudyItem[] {
   const pattern: StudyItem["type"][] = [
     "quiz",
@@ -88,7 +140,13 @@ export function quickQueue(
     "connection",
   ];
   const rank = (i: StudyItem) =>
-    conceptsOf(i).filter((id) => memory[id] === "shaky").length;
+    conceptsOf(i).reduce(
+      (n, id) =>
+        n +
+        (flags?.[id] === "misconception" ? 3 : memory[id] === "shaky" ? 1 : 0),
+      0,
+    );
+  items = originals(items).length ? originals(items) : items;
   const ranked = [...items].sort(
       (a, b) => rank(b) - rank(a) || a.id.localeCompare(b.id),
     ),

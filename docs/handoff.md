@@ -1,3 +1,5 @@
+> Current Stage 3 release: see [the test/release guide](stage-3-ready.md) and [current status](status.md). The Stage 2 handoff below is retained as history.
+
 # Stage 2 checkpoint → Stage 3 handoff
 
 Updated October 26, 2026. Copy the continuation prompt below into a new chat opened in `/Users/anshulkhandekar/RabbitHole`, then add your discovered issues and chosen features. Stage 2 is implemented and built locally, but **has not passed every installed-extension acceptance check**.
