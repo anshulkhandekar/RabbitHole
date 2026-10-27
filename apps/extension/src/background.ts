@@ -3,6 +3,17 @@ import {
   Capture,
   type Session,
 } from "../../../packages/contracts/src/index";
+import {
+  practicePreferences,
+  sessionDefaults,
+  type PracticePreferences,
+  type GoCompletion,
+} from "./settings-model";
+import {
+  advanceHandoff,
+  handoffPending,
+  HANDOFF_BATCH_SIZE,
+} from "./handoff-model";
 import type { Handoff } from "./handoff";
 import { googleQuery } from "./google";
 import { isExcluded, looksUnrelated, siteKey } from "./exclusion";
@@ -22,6 +33,11 @@ type Local = {
   handoffs?: Record<string, Handoff>;
   widgetPosition?: { x: number; y: number };
   askOnSearch?: boolean;
+  newSessionDefaults?: Session["settings"];
+  practicePreferences?: PracticePreferences;
+  goCompletion?: GoCompletion;
+  mapSeen?: Record<string, number>;
+  mapUpdated?: Record<string, number>;
   // Tab-scoped like bindings: cleared on browser restart.
   offers: Record<string, Offer>;
   hush: Record<string, number>;
@@ -61,9 +77,13 @@ const load = async (): Promise<Local> => {
   state.hush = bindings?.hush ?? {};
   state.lastCapture = bindings?.lastCapture ?? {};
   state.searchSession = bindings?.searchSession;
-  for (const handoff of Object.values(state.handoffs ?? {}))
-    if (Date.now() - Date.parse(handoff.startedAt) > 10 * 60_000)
-      handoff.status = "stalled";
+  for (const [id, handoff] of Object.entries(state.handoffs ?? {}))
+    if (state.sessions[id])
+      state.handoffs![id] = advanceHandoff(
+        handoff,
+        state.sessions[id],
+        state.sessions[id],
+      );
   // Session storage survives worker suspension but is cleared by a browser restart.
   // Never trust persisted tab IDs after restart, even if onStartup was not delivered.
   if (!bindings) {
@@ -154,7 +174,7 @@ function createSession(
     createdAt: now,
     updatedAt: now,
     version: 0,
-    settings: Preferences.parse({}),
+    settings: sessionDefaults(s.newSessionDefaults),
     analysis: null,
     processed: [],
     captures: [],
@@ -340,7 +360,7 @@ chrome.alarms.onAlarm.addListener(
   () =>
     void transact(async (s) => {
       await flush(s);
-      return Object.keys(s.handoffs ?? {}).length > 0;
+      return Object.values(s.handoffs ?? {}).some(handoffPending);
     }).then((waiting) => {
       if (waiting)
         return handle(
@@ -636,6 +656,35 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       return s;
     }
     if (msg.type === "state") return s;
+    if (msg.type === "map-seen" && s.sessions[msg.id]) {
+      s.mapSeen ??= {};
+      s.mapSeen[msg.id] = s.sessions[msg.id].version;
+      await persist(s);
+      return s;
+    }
+    if (msg.type === "preferences") {
+      if (msg.newSessionDefaults)
+        s.newSessionDefaults = sessionDefaults(msg.newSessionDefaults);
+      if (msg.practicePreferences)
+        s.practicePreferences = practicePreferences(msg.practicePreferences);
+      if (["notify", "open", "quiet"].includes(msg.goCompletion))
+        s.goCompletion = msg.goCompletion;
+      await persist(s);
+      return s;
+    }
+    if (msg.type === "practice-state") {
+      const session = s.sessions[msg.id];
+      if (!session) throw new Error("Unknown session");
+      session.practice = {
+        dismissedHarder: Array.isArray(msg.practice?.dismissedHarder)
+          ? msg.practice.dismissedHarder
+              .filter((id: unknown) => typeof id === "string")
+              .slice(0, 40)
+          : [],
+      };
+      await persist(s);
+      return s;
+    }
     if (msg.type === "handoff" || msg.type === "handoff-cancel") {
       const session = s.sessions[msg.id];
       if (!session) throw new Error("Unknown session");
@@ -644,7 +693,8 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       else {
         if (typeof msg.prompt !== "string" || msg.prompt.length > 20_000)
           throw new Error("Invalid handoff prompt");
-        const previous = s.handoffs[msg.id];
+        const old = s.handoffs[msg.id];
+        const previous = handoffPending(old) ? old : undefined;
         s.handoffs[msg.id] = {
           sessionId: msg.id,
           prompt: msg.prompt,
@@ -661,7 +711,7 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
                       !session.processed.includes(c.id) &&
                       !session.hidden?.includes(c.id),
                   )
-                  .slice(0, 24)
+                  .slice(0, HANDOFF_BATCH_SIZE)
                   .map((c) => c.id)),
           startedAt: previous?.startedAt ?? new Date().toISOString(),
           status: previous?.status ?? "waiting",
@@ -683,7 +733,10 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       if (go.protocol !== "https:") throw new Error("Agent URL must use HTTPS");
       s.config = {
         backend: url.href.replace(/\/$/, ""),
-        token: String(msg.config.token),
+        token:
+          typeof msg.config.token === "string" && msg.config.token
+            ? msg.config.token
+            : s.config.token,
         agentUrl: go.href,
       };
       await register();
@@ -863,6 +916,7 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
               .map((c) => local.captures.find((l) => l.id === c.id) ?? c);
           }
           if (local) {
+            remote.practice = local.practice;
             remote.captures.push(
               ...local.captures.filter(
                 (c) =>
@@ -878,12 +932,14 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
           }
           s.sessions[remote.id] = remote;
           const handoff = s.handoffs?.[remote.id];
-          if (
-            handoff &&
-            remote.version > handoff.version &&
-            handoff.captureIds.every((id) => remote.processed.includes(id))
-          )
-            delete s.handoffs![remote.id];
+          if (handoff) {
+            s.handoffs![remote.id] = advanceHandoff(handoff, remote, local);
+            if (s.handoffs![remote.id].status === "saved") {
+              s.mapUpdated ??= {};
+              s.mapUpdated[remote.id] =
+                s.handoffs![remote.id].savedVersion ?? remote.version;
+            }
+          }
         }
         s.error = undefined;
       } catch (e) {

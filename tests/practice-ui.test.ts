@@ -115,3 +115,59 @@ test("matching locks each correct pair immediately and keeps wrong picks playabl
   await act(async () => root.unmount());
   dom.window.close();
 });
+
+// Switching must preserve checked answers and discard an unchecked pick.
+test("topic switcher ends a round without saving an unchecked quiz pick", async () => {
+  const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost" });
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    HTMLElement: dom.window.HTMLElement,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  dom.window.HTMLElement.prototype.scrollTo = () => {};
+  const saved: Attempt[] = [];
+  const session = {
+    id: "s1",
+    version: 1,
+    analysis: analysis(),
+    attempts: [],
+    captures: [],
+    processed: [],
+    settings: {},
+    status: "paused",
+  } as unknown as Session;
+  const root = createRoot(document.getElementById("root")!);
+  await act(async () =>
+    root.render(
+      React.createElement(Practice, {
+        session,
+        onReview: async (a) => {
+          saved.push(a);
+          return true;
+        },
+        onFeedback: () => {},
+        onToast: () => {},
+      }),
+    ),
+  );
+  const click = async (el: Element) =>
+    act(async () => {
+      el.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    });
+  const nav = document.querySelector('nav[aria-label="Practice topics"]');
+  assert.ok(nav, "hub offers main topics");
+  await click(
+    [...document.querySelectorAll("button")].find((b) =>
+      b.textContent?.startsWith("Start"),
+    )!,
+  );
+  await click(document.querySelectorAll(".run-options button")[1]);
+  await click(document.querySelector('[aria-haspopup="dialog"]')!);
+  assert.match(document.body.textContent!, /unchecked pick/);
+  await click(document.querySelector('[data-switch-topic="n1"]')!);
+  assert.equal(saved.length, 0);
+  assert.equal(document.querySelector('[aria-expanded="true"]'), null);
+  await act(async () => root.unmount());
+  dom.window.close();
+});

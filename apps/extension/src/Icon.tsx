@@ -1,5 +1,17 @@
 import React from "react";
 const paths = {
+  alert: (
+    <>
+      <path d="m10 3 8 14H2Z" />
+      <path d="M10 8v4M10 14h.01" />
+    </>
+  ),
+  info: (
+    <>
+      <circle cx="10" cy="10" r="7" />
+      <path d="M10 9v5M10 6h.01" />
+    </>
+  ),
   brief: (
     <g
       dangerouslySetInnerHTML={{

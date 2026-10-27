@@ -57,3 +57,26 @@ Quote validation reports every invalid evidence path with item and capture IDs, 
 Backend commits `392515e` and `db360f1` implement the repair. Private connector release 6 uses discovery revision 4, and the live agent instructions now require read-only preflight before write approval. Invalid IDs name the offending values; quotation validation still requires exact captured text. No validation guard or write confirmation was removed. Live discovery showed ValidateSessionAnalysis enabled under Read, with Write still Always ask. An existing conversation was resumed for preflight verification; see the v2 verification log for its final outcome.
 
 The final handoff caches at most 32 validated guide drafts in process memory for 30 minutes. Preflight leaves sessions and processed markers unchanged. SaveValidatedAnalysis accepts the returned sessionId, validationId and title, requires normal write approval, checks the owner, and reruns the atomic save validation. Replaying the same saved reference returns its prior receipt rather than incrementing the version twice. Restarted, expired or evicted drafts require revalidation. Legacy full-payload SaveSessionAnalysis remains available for existing clients.
+
+## October 27 save-loop repair — discovery revision 6
+
+This supersedes the older 24-capture invocation guidance above. GetSession now defaults to a six-capture page and returns a stable short `ref` for each capture plus `processingDefaults` with the current expectedVersion and the page's pending refs. Go can use these refs in `captureIds`, `evidence[].captureId` and `processedCaptureIds`; the server resolves them to canonical IDs before validation and caching. Existing UUID-based clients and saved data remain valid. Unknown references are rejected, not guessed or silently corrected. Hidden/deleted-source checks, exact quotations, ownership, version checks and write approval still apply.
+
+The extension records the same first six pending finds in its handoff. A successful save of that batch completes the handoff even when later finds remain pending. Send those later finds in another invocation. The updated agent instructions describe search-only trails as interests and evidence gaps, without inventing factual explanations or quiz answers. Search queries are valid inspected captures; an empty `processedCaptureIds` array is not evidence that searches are unsupported. When pending captures exist, that omission now produces an explicit correction message. Unknown evidence references identify their exact item paths and available short refs.
+
+Manual update order:
+
+1. Deploy the updated backend from this checkout to Render. The changes are local until you commit/push/deploy them; rebuilding the connector alone does not deploy backend code. No database migration or token rotation is required.
+2. Copy `integrations/superhuman/pack.ts` into the connector source, build it and publish a new release. Its endpoint is `https://rabbithole-1c5e.onrender.com/mcp?schema=6`. Refresh the agent's attached connection if necessary. Read remains Always allow and Write remains Always ask.
+3. Replace the Go agent Instructions field with the text after the divider in `integrations/superhuman/agent-instructions.md`, then save. `live-agent-instructions.txt` is a record of the previous manual state; it was deliberately not rewritten to pretend these instructions are already live.
+4. Reload RabbitHole at `chrome://extensions`, reopen its workspace/panel, and refresh research tabs.
+5. Cancel any old Waiting for Go handoff, then Send to Go again in a fresh agent chat. Cancel only clears the handoff receipt; it does not remove finds. Existing sessions can be reused.
+
+Live acceptance test:
+
+- Ask GetSession for the intended session. Confirm `captures[].ref`, `processingDefaults`, the current version, and at most six captures in the default page. If these are absent, stop: the backend/connector is still stale.
+- Send a six-or-fewer-find batch. Go must use the supplied refs, validate successfully, request normal SaveValidatedAnalysis approval, and report the returned saved version and remaining pending count. Approve only the intended write.
+- For a query-only batch, expect an interest-and-gap map, not fabricated factual teaching. All inspected query refs must be included in `processedCaptureIds`. For a substantive learning guide, capture an article or highlight and send the next batch.
+- Return to RabbitHole: the waiting state should end, the saved batch's new dots should clear, and any later finds should remain new. Repeat Send to Go for the remainder.
+
+Local automated verification covers canonical/ref round trips through the authenticated MCP client, stable refs across deletion/paging, hidden-source protection, actionable typo/omission errors, honest search-only maps, and partial six-find handoff completion. A real Go run after these manual deployment steps is still required; local tests do not prove the agent will follow the updated instructions.

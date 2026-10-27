@@ -76,7 +76,14 @@ export function Segmented({
 }: {
   label: string;
   value: string;
-  options: { value: string; label: string; icon?: IconName; count?: number }[];
+  options: {
+    value: string;
+    label: string;
+    icon?: IconName;
+    count?: number;
+    disabled?: boolean;
+    attention?: boolean;
+  }[];
   onChange: (value: string) => void;
 }) {
   return (
@@ -85,19 +92,28 @@ export function Segmented({
         <button
           key={o.value}
           role="tab"
+          disabled={o.disabled}
+          aria-description={o.attention ? "Map updated" : undefined}
           aria-selected={value === o.value}
           tabIndex={value === o.value ? 0 : -1}
           onClick={() => onChange(o.value)}
           onKeyDown={(e) => {
             if (["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) {
               e.preventDefault();
-              const next =
+              const enabled = options
+                .map((o, index) => ({ ...o, index }))
+                .filter((o) => !o.disabled);
+              const position = enabled.findIndex((o) => o.index === i);
+              const target =
                 e.key === "Home"
                   ? 0
                   : e.key === "End"
-                    ? options.length - 1
-                    : (i + (e.key === "ArrowRight" ? 1 : options.length - 1)) %
-                      options.length;
+                    ? enabled.length - 1
+                    : (position +
+                        (e.key === "ArrowRight" ? 1 : enabled.length - 1)) %
+                      enabled.length;
+              const next = enabled[target]?.index;
+              if (next === undefined) return;
               onChange(options[next].value);
               (
                 e.currentTarget.parentElement?.children[next] as HTMLElement
@@ -107,6 +123,13 @@ export function Segmented({
         >
           {o.icon && <Icon name={o.icon} size={16} />}
           <span>{o.label}</span>
+          {o.attention && (
+            <i
+              className="new-find-dot"
+              aria-hidden="true"
+              title="Map updated"
+            />
+          )}
           {o.count !== undefined && <span className="count">{o.count}</span>}
         </button>
       ))}

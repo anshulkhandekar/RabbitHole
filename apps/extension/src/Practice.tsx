@@ -1,17 +1,20 @@
 import React, { useState, useEffect, useRef } from "react";
 import type { Session, Attempt } from "../../../packages/contracts/src/index";
-import { Button, IconButton } from "./components";
+import { Button, Chip, Segmented } from "./components";
 import { Icon } from "./Icon";
 import { Evidence } from "./Trail";
 import { Matching } from "./Matching";
 import {
+  practiceHub,
+  harderReady,
+  harderLockReason,
+  roundQueue,
+  type Lane,
+  type Activity,
+  type PracticeTopic,
   attemptResult,
   connectionQueue,
-  quickQueue,
   conceptsOf,
-  deriveMemory,
-  deriveFlags,
-  originals,
   retryItems,
   type StudyItem,
   type Result,
@@ -29,6 +32,72 @@ const confidences: [Confidence, string][] = [
   ["think", "Think so"],
   ["sure", "Sure"],
 ];
+export function PracticeLoading({
+  name = "Practice",
+  onRetry,
+}: {
+  name?: string;
+  onRetry?: () => void;
+}) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setSlow(true), 8000);
+    return () => clearTimeout(timer);
+  }, []);
+  return (
+    <section className="practice-hub" aria-busy="true">
+      <nav aria-label="Practice topics">
+        <h3>TOPICS</h3>
+        {[0, 1, 2, 3].map((i) => (
+          <div className="practice-skeleton" key={i} />
+        ))}
+      </nav>
+      <main className="practice-main">
+        <h1>{name}</h1>
+        <p role="status">Loading your questions…</p>
+        <div className="practice-skeleton skeleton-bar" />
+        <div className="mastery-legend">
+          <span>Strong</span>
+          <span>Shaky</span>
+          <span>Confident misses</span>
+          <span>Untested</span>
+        </div>
+        <h3 className="practice-label">WHAT DO YOU WANT TO PRACTICE?</h3>
+        <div className="practice-lanes">
+          {(
+            [
+              [
+                "New questions",
+                "quiz",
+                "Questions you haven't answered yet. Starts with the basics of each topic.",
+              ],
+              [
+                "Review misses",
+                "flip",
+                "The ideas you missed, asked a new way. The ones you were sure about come first.",
+              ],
+              [
+                "Harder practice",
+                "practice",
+                "Apply-and-transfer questions. Opens for a topic once its basics hold.",
+              ],
+            ] as const
+          ).map(([title, icon, description]) => (
+            <button key={title} disabled>
+              <Icon name={icon} />
+              <strong>{title}</strong>
+              <div className="practice-skeleton skeleton-count" />
+              <p>{description}</p>
+            </button>
+          ))}
+        </div>
+        <h3 className="practice-label">ACTIVITY</h3>
+        <div className="practice-skeleton" />
+        {slow && <Button onClick={onRetry}>Try again</Button>}
+      </main>
+    </section>
+  );
+}
 export function Practice({
   session,
   edgeId,
@@ -36,8 +105,28 @@ export function Practice({
   onFeedback,
   onToast,
   onMap,
+  onSend,
+  onConnect,
+  onGenerate,
+  connected = true,
+  preferences = {},
+  onPracticeState,
+  loading = false,
+  onRetry,
 }: {
   session: Session;
+  onSend?: () => void;
+  onGenerate?: (request: string) => void;
+  onConnect?: () => void;
+  connected?: boolean;
+  preferences?: {
+    roundSize?: number;
+    confidence?: boolean;
+    harderOffers?: boolean;
+  };
+  onPracticeState?: (state: NonNullable<Session["practice"]>) => void;
+  loading?: boolean;
+  onRetry?: () => void;
   edgeId?: string;
   onReview: (a: Attempt) => Promise<boolean>;
   onFeedback: (text: string) => void;
@@ -45,12 +134,107 @@ export function Practice({
   onMap?: (brighter: string[]) => void;
 }) {
   const a = session.analysis,
-    items = a?.studyItems ?? [],
-    memory = a ? deriveMemory(a, session.attempts) : {},
-    flags = a ? deriveFlags(a, session.attempts) : {},
-    shaky = a?.concepts.filter((c) => memory[c.id] === "shaky") ?? [],
-    confident =
-      a?.concepts.filter((c) => flags[c.id] === "misconception") ?? [];
+    items = a?.studyItems ?? [];
+  const hub = a ? practiceHub(a, session.attempts) : null;
+  const [topicId, setTopicId] = useState(
+      hub?.topics.find(
+        (t) =>
+          t.id === edgeId ||
+          t.items.some((i) => conceptsOf(i).includes(edgeId ?? "")),
+      )?.id ?? "all",
+    ),
+    [lane, setLane] = useState<Lane>("new"),
+    [activity, setActivity] = useState<Activity>("mixed"),
+    [switcher, setSwitcher] = useState(false),
+    [bankDismissed, setBankDismissed] = useState(false),
+    [dismissed, setDismissed] = useState<string[]>(
+      session.practice?.dismissedHarder ?? [],
+    );
+  const switchHost = useRef<HTMLDivElement>(null),
+    switchButton = useRef<HTMLButtonElement>(null);
+  const topic = hub?.topics.find((t) => t.id === topicId) ?? hub?.all;
+  const readyTopics = hub?.topics.filter((t) => harderReady(t).ready) ?? [];
+  const roundSize = preferences.roundSize ?? 8;
+  const laneNames = {
+    new: "New questions",
+    review: "Review misses",
+    harder: "Harder practice",
+  };
+  function available(
+    t: PracticeTopic,
+    l = lane,
+    size = roundSize,
+    mode = activity,
+  ) {
+    return roundQueue(
+      t,
+      l,
+      mode,
+      size,
+      t.id === "all" ? hub?.topics : undefined,
+    );
+  }
+  function startTopic(
+    t: PracticeTopic,
+    l = lane,
+    size = roundSize,
+    mode: Activity = activity,
+  ) {
+    if (mode !== "mixed" && !t.counts[mode]) mode = "mixed";
+    setActivity(mode);
+    if (l === "harder" && t.id !== "all" && !harderReady(t).ready) return;
+    setTopicId(t.id);
+    setLane(l);
+    closeSwitcher();
+    const next = dismissed.filter(
+      (id) =>
+        id !== t.id &&
+        !(t.id === "all" && readyTopics.some((r) => r.id === id)),
+    );
+    setDismissed(next);
+    onPracticeState?.({ ...session.practice, dismissedHarder: next });
+    const q = available(t, l, size, mode);
+    if (!q.length) {
+      setResults([]);
+      setQueue([]);
+      setScreen("home");
+      reset();
+      return;
+    }
+    start(q, laneNames[l]);
+  }
+  function closeSwitcher() {
+    setSwitcher(false);
+    switchButton.current?.focus();
+  }
+  useEffect(() => {
+    if (!switcher) return;
+    const outside = (e: PointerEvent) => {
+      if (!switchHost.current?.contains(e.target as Node)) setSwitcher(false);
+    };
+    const focus = (e: FocusEvent) => {
+      if (!switchHost.current?.contains(e.target as Node)) setSwitcher(false);
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("focusin", focus);
+    switchHost.current
+      ?.querySelector<HTMLElement>('[role="dialog"] button:not(:disabled)')
+      ?.focus();
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("focusin", focus);
+    };
+  }, [switcher]);
+  useEffect(() => {
+    if (topic && activity !== "mixed" && !topic.counts[activity])
+      setActivity("mixed");
+    if (
+      topic &&
+      lane === "harder" &&
+      (topic.id === "all" ? !readyTopics.length : !harderReady(topic).ready)
+    )
+      setLane("new");
+  }, [topicId]);
   const requestedEdge = a?.edges.find((e) => e.id === edgeId),
     ids =
       edgeId === "quick"
@@ -68,7 +252,17 @@ export function Practice({
   const initial = edgeId
     ? requestedEdge
       ? connectionQueue(a!, requestedEdge.id)
-      : quickQueue(filtered, memory, flags)
+      : a
+        ? (() => {
+            const scoped = practiceHub(
+              { ...a, studyItems: filtered },
+              session.attempts,
+            ).all;
+            return [...scoped.lanes.new, ...scoped.lanes.review];
+          })()
+            .filter((i, n, all) => all.findIndex((x) => x.id === i.id) === n)
+            .slice(0, roundSize)
+        : []
     : [];
   const [screen, setScreen] = useState<"home" | "run" | "done">(
       initial.length ? "run" : "home",
@@ -76,7 +270,6 @@ export function Practice({
     [queue, setQueue] = useState<StudyItem[]>(initial),
     [index, setIndex] = useState(0),
     [results, setResults] = useState<Answer[]>([]),
-    [streak, setStreak] = useState(0),
     [title, setTitle] = useState(
       edgeId && edgeId !== "quick" ? "Selected ideas" : "Quick dig",
     );
@@ -120,7 +313,6 @@ export function Practice({
     setQueue(q);
     setIndex(0);
     setResults([]);
-    setStreak(0);
     setTitle(name);
     setScreen("run");
     reset();
@@ -196,7 +388,6 @@ export function Practice({
       }
       const next = [...results, { item, result, attempt }];
       setResults(next);
-      setStreak(result === "right" ? streak + 1 : 0);
       if (endRun || index + 1 === queue.length) {
         setScreen("done");
         setPending(null);
@@ -240,6 +431,7 @@ export function Practice({
   }
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
+      if (document.querySelector(".settings-dialog")) return;
       const el = e.target as HTMLElement,
         typing = el.matches("textarea,input,[contenteditable=true]");
       if (typing) {
@@ -257,12 +449,21 @@ export function Practice({
       }
       if (screen === "home" && e.key === "Enter" && !el.closest("button")) {
         e.preventDefault();
-        start(quickQueue(filtered, memory, flags), "Quick dig");
+        if (topic) startTopic(topic);
         return;
       }
       if (screen !== "run" || saving) return;
+      if (e.key === "t" || e.key === "T") {
+        e.preventDefault();
+        setSwitcher(!switcher);
+        return;
+      }
       if (e.key === "Escape") {
         e.preventDefault();
+        if (switcher) {
+          closeSwitcher();
+          return;
+        }
         finish();
         return;
       }
@@ -297,125 +498,342 @@ export function Practice({
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   });
-  if (!items.length && !initial.length)
+  if (loading) return <PracticeLoading name={topic?.name} onRetry={onRetry} />;
+  if (!a)
     return (
       <section className="empty">
         <h2>Practice starts with a saved map</h2>
-        <p>Ask Go to create activities from your sources.</p>
+        <p>
+          You have {session.captures.length} finds. Send them to Go and it will
+          write questions for each main idea it finds.
+        </p>
+        <Button primary onClick={connected ? onSend : onConnect}>
+          {connected ? (
+            <>
+              Send to Go{" "}
+              <Chip kind="new">
+                {
+                  session.captures.filter(
+                    (c) =>
+                      !session.processed.includes(c.id) &&
+                      !session.hidden?.includes(c.id),
+                  ).length
+                }{" "}
+                new
+              </Chip>
+            </>
+          ) : (
+            "Connect Go"
+          )}
+        </Button>
       </section>
     );
-  if (screen === "home")
+  function bar(t: PracticeTopic, large = false) {
     return (
-      <section className="practice-v2" ref={host}>
-        <div className="practice-column">
-          <div className="quick-hero">
-            <div>
-              <h2>Quick dig</h2>
-              <p>
-                8 questions in about 4 minutes. It mixes every activity and
-                leans on the {shaky.length} ideas you’re shakiest on.
-              </p>
-              <Button
-                className="btn-lg"
-                onClick={() =>
-                  start(quickQueue(filtered, memory, flags), "Quick dig")
-                }
-              >
-                Start <kbd>Enter</kbd>
-              </Button>
-            </div>
-            <div className="activity-stack" aria-hidden="true">
-              <span>
-                <Icon name="cards" size={26} />
-              </span>
-              <span>
-                <Icon name="match" size={26} />
-              </span>
-              <span>
-                <Icon name="quiz" size={26} />
-              </span>
-            </div>
+      <div
+        className={`mastery-bar ${large ? "large" : ""}`}
+        aria-label={`Strong ${t.strong}, Shaky ${t.shaky}, Confident misses ${t.confidentMisses}, Untested ${t.untested}`}
+      >
+        {(
+          [
+            ["strong", t.strong],
+            ["shaky", t.shaky],
+            ["miss", t.confidentMisses],
+            ["untested", t.untested],
+          ] as const
+        ).map(([key, count]) => (
+          <i className={key} key={key} style={{ flex: count }} />
+        ))}
+      </div>
+    );
+  }
+  if (screen === "home" && hub && topic) {
+    const count = available(topic).length,
+      locked =
+        topic.id === "all" ? !readyTopics.length : !harderReady(topic).ready,
+      offer =
+        preferences.harderOffers !== false
+          ? readyTopics.find(
+              (t) =>
+                !dismissed.includes(t.id) &&
+                (topic.id === "all" || t.id === topic.id) &&
+                t.lanes.harder.length,
+            )
+          : undefined,
+      covered = hub.topics.filter((t) => t.total).length,
+      missingHarder = hub.topics.filter(
+        (t) =>
+          !t.items.some((i) => i.level === "apply" || i.level === "transfer"),
+      ),
+      incomplete =
+        hub.coverage.emptyTopics.length > 0 ||
+        missingHarder.length > 0 ||
+        hub.coverage.missingLanes.some((m) => m.lane === "review"),
+      askMissing = () =>
+        (onGenerate ?? onFeedback)(
+          `For RabbitHole session ${session.id}, retrieve the saved session and evidence, then fill the incomplete question bank. Missing topics: ${hub.coverage.emptyTopics.map((t) => t.name).join(", ") || "none"}. Missing lanes: ${hub.coverage.missingLanes.map((m) => `${m.topicName}: ${m.lane === "review" ? "review variants" : m.lane}`).join("; ")}. Preserve existing IDs, questions and attempts. Validate the full analysis and save it with rebuild intent and no newly processed captures.`,
+        );
+    return (
+      <section className="practice-hub" ref={host}>
+        <nav aria-label="Practice topics">
+          <div className="topic-label">
+            <b>TOPICS</b>
+            <span>{hub.topics.length} main ideas</span>
           </div>
-          <h3>Or practice one way</h3>
-          <div className="practice-modes">
-            {modes.map(([type, name, icon]) => (
+          {[hub.all, ...hub.topics].map((t, i) => (
+            <React.Fragment key={t.id}>
+              {i === 1 && <hr />}
               <button
-                key={type}
-                onClick={() =>
-                  start(
-                    originals(filtered).filter((i) => i.type === type),
-                    name,
-                  )
-                }
+                className={`practice-topic ${!t.total ? "muted" : ""}`}
+                aria-current={topic.id === t.id ? "true" : undefined}
+                onClick={() => setTopicId(t.id)}
               >
-                <Icon name={icon} size={20} />
-                <b>{name}</b>
-                <span>
-                  {originals(filtered).filter((i) => i.type === type).length}{" "}
-                  {type === "matching"
-                    ? originals(filtered).filter((i) => i.type === type)
-                        .length === 1
-                      ? "set"
-                      : "sets"
-                    : type === "quiz"
-                      ? "questions"
-                      : type === "flashcard"
-                        ? "cards"
-                        : "connections"}
+                <span className="topic-label">
+                  <strong>{t.name}</strong>
+                  <span>{t.total} q</span>
                 </span>
+                {bar(t)}
+                <span className="topic-subtitle">
+                  {t.total ? (
+                    <>
+                      {t.untested} untested
+                      {t.confidentMisses > 0 && (
+                        <>
+                          {" "}
+                          ·{" "}
+                          <em>
+                            {t.confidentMisses} confident{" "}
+                            {t.confidentMisses === 1 ? "miss" : "misses"}
+                          </em>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    "No questions yet · Ask Go"
+                  )}
+                </span>
+                {t.id !== "all" && harderReady(t).ready && (
+                  <Chip kind="new">Ready for harder</Chip>
+                )}
+              </button>
+            </React.Fragment>
+          ))}
+          <p className="topic-foot">
+            Topics are the main ideas on your map. Smaller ideas are practiced
+            inside them.
+          </p>
+        </nav>
+        <main className="practice-main">
+          {incomplete && !bankDismissed && (
+            <aside className="bank-banner">
+              <Icon name="info" />
+              <div>
+                <h3>
+                  Go wrote questions for {covered} of {hub.topics.length} topics
+                </h3>
+                <p>
+                  {hub.coverage.emptyTopics.length
+                    ? `${hub.coverage.emptyTopics.map((t) => t.name).join(", ")} has none yet. `
+                    : ""}
+                  Harder questions exist for{" "}
+                  {hub.topics.length - missingHarder.length} topics.
+                  {hub.coverage.missingLanes.some((m) => m.lane === "review") &&
+                    " Some topics still need review variants."}{" "}
+                  You can practice everything else now.
+                </p>
+                <Button onClick={askMissing}>
+                  Ask Go for the missing questions
+                </Button>
+                <Button quiet onClick={() => setBankDismissed(true)}>
+                  Not now
+                </Button>
+              </div>
+            </aside>
+          )}
+          <h1>{topic.name}</h1>
+          <p>
+            {hub.all.total} saved questions across {covered} of{" "}
+            {hub.topics.length} topics
+          </p>
+          {bar(topic, true)}
+          <div className="mastery-legend">
+            <span>Strong {topic.strong}</span>
+            <span>Shaky {topic.shaky}</span>
+            <span>Confident misses {topic.confidentMisses}</span>
+            <span>Untested {topic.untested}</span>
+          </div>
+          <h3 className="practice-label">WHAT DO YOU WANT TO PRACTICE?</h3>
+          <div className="practice-lanes">
+            {(["new", "review", "harder"] as Lane[]).map((l, i) => (
+              <button
+                key={l}
+                aria-pressed={lane === l}
+                disabled={l === "harder" && locked}
+                onClick={() => setLane(l)}
+              >
+                <Icon name={(["quiz", "flip", "practice"] as const)[i]} />
+                <strong>{laneNames[l]}</strong>
+                <b>
+                  {l === "new"
+                    ? `${topic.lanes.new.length} untested`
+                    : l === "review"
+                      ? `${topic.lanes.review.length} to review`
+                      : `Ready on ${topic.id === "all" ? readyTopics.length : Number(!locked)} topic${readyTopics.length === 1 ? "" : "s"}`}
+                </b>
+                {l === "review" && topic.confidentMisses > 0 && (
+                  <Chip kind="new">{topic.confidentMisses} confident</Chip>
+                )}
+                <p>
+                  {l === "new"
+                    ? "Questions you haven't answered yet. Starts with the basics of each topic."
+                    : l === "review"
+                      ? "The ideas you missed, asked a new way. The ones you were sure about come first."
+                      : locked && topic.id !== "all"
+                        ? harderLockReason(topic)
+                        : `Apply-and-transfer questions. Opens for a topic once its basics hold. Locked on ${hub.topics.length - readyTopics.length}.`}
+                </p>
               </button>
             ))}
           </div>
-          {confident.length > 0 && (
-            <>
-              <h3>Confident misses</h3>
-              <p className="confident-note">
-                You were sure about these and got them wrong. They’re the first
-                things a quick dig brings back.
-              </p>
-              <div className="shaky-ideas confident">
-                {confident.map((c) => (
-                  <span key={c.id}>
-                    <i />
-                    {c.label}
-                  </span>
-                ))}
-              </div>
-            </>
-          )}
-          <h3>Shaky ideas</h3>
-          <div className="shaky-ideas">
-            {shaky.map((c) => (
-              <span key={c.id}>
-                <i />
-                {c.label}
+          <h3 className="practice-label">ACTIVITY</h3>
+          <Segmented
+            label="Practice activity"
+            value={activity}
+            onChange={(v) => setActivity(v as Activity)}
+            options={[
+              { value: "mixed", label: "Mixed" },
+              ...modes.map(([value, label]) => ({
+                value,
+                label,
+                count: topic.counts[value],
+                disabled: !topic.counts[value],
+              })),
+            ]}
+          />
+          {count ? (
+            <div className="practice-start">
+              <Button
+                primary
+                className="btn-lg"
+                onClick={() => startTopic(topic)}
+              >
+                Start {count}{" "}
+                {lane === "new"
+                  ? "new questions"
+                  : lane === "review"
+                    ? "reviews"
+                    : "harder questions"}{" "}
+                <kbd>Enter</kbd>
+              </Button>
+              <span>
+                About {Math.max(1, Math.ceil(count / 2))} minutes ·{" "}
+                {activity === "mixed"
+                  ? "mixed activities"
+                  : modes.find((m) => m[0] === activity)?.[1]}{" "}
+                · {topic.name.toLowerCase()}
               </span>
-            ))}
-            {shaky.length ? (
+            </div>
+          ) : (
+            <section className="practice-exhausted">
+              <h2>You've tried every question on {topic.name}</h2>
+              <p>
+                {topic.total - topic.untested} of {topic.total} answered. Here's
+                what's left for this topic.
+              </p>
+              <div>
+                <span>
+                  Review misses ({topic.lanes.review.length},{" "}
+                  {topic.confidentMisses} you were sure about)
+                </span>
+                <Button
+                  disabled={!topic.lanes.review.length}
+                  onClick={() => startTopic(topic, "review")}
+                >
+                  Start
+                </Button>
+              </div>
+              <div>
+                <span>
+                  Harder practice{" "}
+                  {locked && (
+                    <>
+                      <Chip>Locked</Chip> {harderLockReason(topic)}
+                    </>
+                  )}
+                </span>
+                <Button
+                  disabled={locked || !topic.lanes.harder.length}
+                  onClick={() => startTopic(topic, "harder")}
+                >
+                  Start
+                </Button>
+              </div>
+              <div>
+                <span>More questions on this topic</span>
+                <Button
+                  onClick={() =>
+                    (onGenerate ?? onFeedback)(
+                      `Retrieve RabbitHole session ${session.id} and its evidence. Add more ${laneNames[lane]} for topic ${topic.name}; preserve existing IDs and validate before saving a rebuild.`,
+                    )
+                  }
+                >
+                  Ask Go
+                </Button>
+              </div>
+              {hub.topics
+                .filter((t) => t.id !== topic.id && t.untested)
+                .slice(0, 1)
+                .map((t) => (
+                  <div key={t.id}>
+                    <span>
+                      Another topic: {t.name} has {t.untested} untested
+                    </span>
+                    <Button
+                      onClick={() => {
+                        setTopicId(t.id);
+                        setLane("new");
+                      }}
+                    >
+                      Switch
+                    </Button>
+                  </div>
+                ))}
+            </section>
+          )}
+          {offer && (
+            <aside className="harder-offer">
+              <p>{offer.name}</p>
+              <h2>Ready for harder questions?</h2>
+              <p>
+                You've answered all {offer.basicTotal} basic questions here,{" "}
+                {offer.rightWithoutHints} of them right without hints. Harder
+                questions ask you to use the idea somewhere new.
+              </p>
+              <Button
+                primary
+                onClick={() => startTopic(offer, "harder", 5, "mixed")}
+              >
+                Try {Math.min(5, offer.lanes.harder.length)} harder questions
+              </Button>
               <Button
                 quiet
-                onClick={() =>
-                  start(
-                    quickQueue(
-                      items.filter((i) =>
-                        conceptsOf(i).some((id) => memory[id] === "shaky"),
-                      ),
-                      memory,
-                      flags,
-                    ),
-                    "Shaky ideas",
-                  )
-                }
+                onClick={() => {
+                  const next = [...dismissed, offer.id];
+                  setDismissed(next);
+                  onPracticeState?.({
+                    ...session.practice,
+                    dismissedHarder: next,
+                  });
+                }}
               >
-                Practice just these
+                Not yet
               </Button>
-            ) : (
-              <p>Nothing shaky right now. Practice to see what you remember.</p>
-            )}
-          </div>
-        </div>
+            </aside>
+          )}
+        </main>
       </section>
     );
+  }
   if (screen === "done") {
     const right = results.filter((r) => r.result === "right").length,
       pct = results.length ? right / results.length : 0,
@@ -540,28 +958,125 @@ export function Practice({
   return (
     <section className="practice-v2" ref={host}>
       <div className="practice-column">
-        <div className="run-top">
-          <IconButton
-            name="x"
-            label="End practice"
+        <div className="round-header">
+          <Button quiet onClick={finish}>
+            ‹ Practice
+          </Button>
+          <div className="round-switch" ref={switchHost}>
+            <button
+              ref={switchButton}
+              className="round-topic-button"
+              aria-haspopup="dialog"
+              aria-expanded={switcher}
+              onClick={() => setSwitcher(!switcher)}
+            >
+              <span>TOPIC</span>
+              <strong>
+                {topic?.name ?? "Selected ideas"} <Icon name="chevronDown" />
+              </strong>
+            </button>
+            <Button quiet onClick={() => setSwitcher(!switcher)}>
+              {laneNames[lane]}
+            </Button>
+            <Button quiet onClick={() => setSwitcher(!switcher)}>
+              {activity === "mixed"
+                ? "Mixed"
+                : modes.find((m) => m[0] === activity)?.[1]}
+            </Button>
+            {switcher && hub && (
+              <div
+                className="practice-popover"
+                role="dialog"
+                aria-label="Switch practice topic"
+              >
+                <h3>SWITCH TOPIC</h3>
+                {[hub.all, ...hub.topics].map((t) => (
+                  <button
+                    key={t.id}
+                    data-switch-topic={t.id}
+                    disabled={!t.total || saving}
+                    onClick={() => startTopic(t)}
+                  >
+                    <span>
+                      <strong>{t.name}</strong>
+                      <small>
+                        {t.total
+                          ? `${t.untested} untested · ${t.confidentMisses} confident misses`
+                          : "No questions yet"}
+                      </small>
+                    </span>
+                    {t.id === topicId && <Icon name="check" />}
+                  </button>
+                ))}
+                <h3>PRACTICE</h3>
+                <Segmented
+                  label="Practice lane"
+                  value={lane}
+                  options={(["new", "review", "harder"] as Lane[]).map((l) => ({
+                    value: l,
+                    label:
+                      l === "new"
+                        ? "New"
+                        : l === "review"
+                          ? "Review misses"
+                          : "Harder",
+                    disabled:
+                      saving ||
+                      (l === "harder" &&
+                        (topic?.id === "all"
+                          ? !readyTopics.length
+                          : !topic || !harderReady(topic).ready)),
+                  }))}
+                  onChange={(l) => {
+                    if (topic) startTopic(topic, l as Lane);
+                  }}
+                />
+                {topic &&
+                  (topic.id === "all"
+                    ? !readyTopics.length
+                    : !harderReady(topic).ready) && (
+                    <p>
+                      {topic.id === "all"
+                        ? "No topic has all its basics ready yet."
+                        : harderLockReason(topic)}
+                    </p>
+                  )}
+                <p className="saved-note">
+                  Your {results.length} checked answers are saved. Switching
+                  ends this round and starts a new one on the topic you pick.
+                  {(choice !== null || answer || pending) &&
+                    ` Your unchecked pick on question ${index + 1} won't be kept.`}
+                </p>
+              </div>
+            )}
+          </div>
+          <div className="round-progress">
+            <div
+              className="run-segments"
+              aria-label={`${index + 1} of ${queue.length}`}
+            >
+              {queue.map((_, i) => (
+                <i
+                  key={i}
+                  className={
+                    results[i]?.result ?? (i === index ? "current" : "")
+                  }
+                />
+              ))}
+            </div>
+            <span className="saved-note">
+              <Icon name="check" size={14} /> {results.length} answers saved ·
+              question {index + 1} of {queue.length}
+            </span>
+          </div>
+          <Button
+            quiet
+            aria-label="End practice"
             disabled={saving}
             onClick={finish}
-          />
-          <div
-            className="run-segments"
-            aria-label={`${index + 1} of ${queue.length}`}
           >
-            {queue.map((_, i) => (
-              <i
-                key={i}
-                className={results[i]?.result ?? (i === index ? "current" : "")}
-              />
-            ))}
-          </div>
-          {streak >= 2 && <span className="run-streak">{streak} in a row</span>}
-          <span>
-            {index + 1} / {queue.length}
-          </span>
+            End round
+          </Button>
         </div>
         <div className="run-question" key={index}>
           <p className="question-type">
@@ -573,7 +1088,7 @@ export function Practice({
           {item.type === "quiz" && (
             <>
               <h2 className="run-prompt">{item.prompt}</h2>
-              {choice === null && (
+              {choice === null && preferences.confidence !== false && (
                 <div
                   className="confidence-row"
                   role="group"

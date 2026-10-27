@@ -6,5 +6,11 @@ export type Handoff = {
   version: number;
   captureIds: string[];
   startedAt: string;
-  status: "waiting" | "stalled";
+  status: "waiting" | "stalled" | "saved" | "failed";
+  reason?: string;
+  savedAt?: string;
+  savedVersion?: number;
+  ideas?: number;
+  questions?: number;
+  finds?: number;
 };

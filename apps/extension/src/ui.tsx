@@ -5,11 +5,7 @@ import "./styles/tokens.css";
 import "./styles/fonts.css";
 import "./styles/components.css";
 import "./ui.css";
-import type {
-  Session,
-  AnalysisData,
-  Attempt,
-} from "../../../packages/contracts/src/index";
+import type { Session, Attempt } from "../../../packages/contracts/src/index";
 import { Icon } from "./Icon";
 import {
   Brand,
@@ -25,8 +21,11 @@ import { toAnkiCsv, toMarkdown, toQuizlet } from "./export-model";
 import { MapView, type Selection } from "./MapView";
 import { shortTitle } from "./summary-model";
 import { Summary } from "./Summary";
-import { Practice } from "./Practice";
-import { analysisDelta, domain, time } from "./ui-model";
+import { ReadyNote } from "./ReadyNote";
+import { handoffPending, HANDOFF_BATCH_SIZE } from "./handoff-model";
+import { Settings } from "./Settings";
+import { Practice, PracticeLoading } from "./Practice";
+import { domain, time } from "./ui-model";
 import type { Handoff } from "./handoff";
 const request = (type: string, extra: any = {}) =>
   chrome.runtime.sendMessage({ type, ...extra });
@@ -40,13 +39,6 @@ type TabContext = {
   count: number;
   excluded: boolean;
   askOnSearch?: boolean;
-};
-type Update = {
-  sessionId: string;
-  version: number;
-  at: string;
-  ideas: number;
-  connections: number;
 };
 function App() {
   const [state, setState] = useState<any>(null),
@@ -68,7 +60,6 @@ function App() {
       walk?: boolean;
       brighten?: string[];
     }>({}),
-    [more, setMore] = useState(false),
     [menu, setMenu] = useState(false),
     [creating, setCreating] = useState(false),
     [curiosity, setCuriosity] = useState(""),
@@ -78,47 +69,73 @@ function App() {
       new URLSearchParams(location.search).has("settings"),
     ),
     [preferences, setPreferences] = useState(false),
-    [updated, setUpdated] = useState<Update | null>(null),
     [synced, setSynced] = useState<string | null>(null),
     [toast, setToast] = useState(""),
     [practiceEdge, setPracticeEdge] = useState<string | undefined>(),
-    [rename, setRename] = useState(""),
-    [analogyDraft, setAnalogyDraft] = useState(""),
     [theme, setTheme] = useState("system");
+  const settingsScroll = useRef(0);
+  const [settingsSection, setSettingsSection] = useState<string | undefined>();
   const handoff = state?.handoffs?.[state.active] as Handoff | undefined;
+  const waiting = handoffPending(handoff);
+  const [readyNote, setReadyNote] = useState(false);
+  const notified = useRef("");
+  const mapDot =
+    (state?.mapSeen?.[state.active] ?? 0) <
+    (state?.mapUpdated?.[state.active] ?? handoff?.savedVersion ?? 0);
+  useEffect(() => {
+    if (handoff?.status !== "saved" || notified.current === handoff.savedAt)
+      return;
+    notified.current = handoff.savedAt ?? "";
+    const mode = state.goCompletion ?? "notify";
+    if (mode === "quiet") return;
+    void chrome.tabs.getCurrent().then((tab) => {
+      if (
+        mode === "open" &&
+        !panel &&
+        tab?.active &&
+        document.visibilityState === "visible"
+      ) {
+        setView("map");
+        setReadyNote(false);
+        void action("map-seen", { id: handoff.sessionId });
+      } else setReadyNote(true);
+    });
+  }, [handoff?.status, handoff?.savedAt]);
+  useEffect(() => {
+    setReadyNote(false);
+  }, [state?.active]);
+
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setMore(false);
         setMenu(false);
       }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, []);
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: Event) => {
+      if (!(e.target as Element).closest?.(".switcher")) setMenu(false);
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("focusin", close);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("focusin", close);
+    };
+  }, [menu]);
   const panel =
     new URLSearchParams(location.search).has("panel") ||
     (!new URLSearchParams(location.search).has("workspace") && narrow);
-  const previous = useRef<Record<string, Session>>({}),
-    syncing = useRef(false),
+  const syncing = useRef(false),
     mounted = useRef(true),
     trailScroll = useRef<HTMLDivElement>(null),
     firstTrail = useRef(true);
   const showToast = useCallback((text: string) => setToast(text), []);
   const apply = useCallback((value: any) => {
     if (!value?.sessions) return;
-    for (const next of Object.values(value.sessions) as Session[]) {
-      const before = previous.current[next.id];
-      if (before && next.version > before.version && next.analysis) {
-        setUpdated({
-          sessionId: next.id,
-          version: next.version,
-          at: next.analyzedAt ?? new Date().toISOString(),
-          ...analysisDelta(before.analysis, next.analysis),
-        });
-      }
-    }
-    previous.current = value.sessions;
     setState(value);
   }, []);
   const updateContext = useCallback(async () => {
@@ -169,11 +186,10 @@ function App() {
     mounted.current = true;
     void action("state");
     void updateContext();
-    void chrome.storage.local
-      .get("uiTheme")
-      .then((v) =>
-        setTheme(typeof v.uiTheme === "string" ? v.uiTheme : "system"),
-      );
+    void chrome.storage.local.get(["uiTheme", "mapList"]).then((v) => {
+      setTheme(typeof v.uiTheme === "string" ? v.uiTheme : "system");
+      setList(v.mapList === true);
+    });
     const change = (changes: any) => {
       if (changes.state) {
         apply(changes.state.newValue);
@@ -247,14 +263,14 @@ function App() {
   useEffect(() => {
     setSelected(null);
     setPracticeEdge(undefined);
-    setRename("");
     setCreating(false);
     setPicked(new Set());
     firstTrail.current = true;
   }, [session?.id]);
   useEffect(() => {
-    if (preferences && session) setAnalogyDraft(session.settings.analogy);
-  }, [preferences, session?.id]);
+    if (!panel && session && view === "map")
+      void action("map-seen", { id: session.id });
+  }, [view, session?.id, panel]);
   const patch = (patch: any) => action("patch", { id: session!.id, patch });
   async function grant() {
     return chrome.permissions.request({
@@ -276,7 +292,6 @@ function App() {
         setCreating(false);
         setCuriosity("");
         setFamiliarity("");
-        setUpdated(null);
       }
     } else
       setError(
@@ -286,7 +301,6 @@ function App() {
   function selectSession(id: string) {
     setMenu(false);
     setCreating(false);
-    setUpdated(null);
     void action("select", { id });
   }
   function newSession() {
@@ -302,7 +316,6 @@ function App() {
       });
     else {
       setView(next);
-      setUpdated(null);
     }
   }
   useEffect(() => {
@@ -321,7 +334,7 @@ function App() {
   }
   async function sendToGo(custom?: string, intent = "incremental") {
     if (!session) return;
-    if (handoff) return;
+    if (waiting) return;
     if (!online) {
       setError("You’re offline. Reconnect before handing this to Go.");
       return;
@@ -339,8 +352,7 @@ function App() {
     }
     const prompt =
       custom ??
-      `Process RabbitHole session ${session.id}. Retrieve the pending captures and existing analysis using RabbitHole tools. Copy capture IDs verbatim. Merge evidence-linked concepts and selected activities; include overview plus summary, takeaways [{text, concept}], route [conceptId], concept.main, studyItem.concept and matching pairs[].concept. Write each idea as claim, why, explanation (with buildsOn), steps when sequential, example and boundary; answer my goal if the session has one. Quiz wrong choices should each reflect a specific wrong belief, with hints and a variantOf sibling for key questions. Run read-only ValidateSessionAnalysis on the complete payload and correct errors BEFORE requesting normal SaveValidatedAnalysis approval using the returned saveArguments (sessionId, validationId, title). Do not retype the guide. If validation is unavailable, stop and report that the connector needs updating. Never repeat an unchanged failed save. Report success only after a saved version, and report remaining pending captures.`;
-    setUpdated(null);
+      `Process RabbitHole session ${session.id}. Retrieve the current session and its first batch of up to ${HANDOFF_BATCH_SIZE} pending captures using RabbitHole tools. Process only this batch this run; leave remaining captures pending for the next Send to Go. Use each capture's short ref exactly in all captureIds, evidence[].captureId and processedCaptureIds; copy expectedVersion and inspected refs from processingDefaults. Keep canonical IDs already in the existing analysis. Never reconstruct UUIDs. Search queries express interests, not factual support: if this batch has only queries, merge an honest interest-and-gap map, mark the queries you actually considered processed, and do not fabricate source-backed facts or quizzes. Merge evidence-linked concepts and selected activities; include overview plus summary, takeaways [{text, concept}], route [conceptId], concept.main, studyItem.concept and matching pairs[].concept. Write each idea as claim, why, explanation (with buildsOn), steps when sequential, example and boundary; answer my goal if the session has one. Quiz wrong choices should each reflect a specific wrong belief, with hints and a variantOf sibling for key questions. Run read-only ValidateSessionAnalysis on the complete payload and correct errors BEFORE requesting normal SaveValidatedAnalysis approval using the returned saveArguments (sessionId, validationId, title). Do not retype the guide. If validation is unavailable, stop and report that the connector needs updating. Never repeat an unchanged failed save. Report success only after a saved version, and report remaining pending captures.`;
     const receipt = {
       sessionId: session.id,
       prompt,
@@ -652,6 +664,7 @@ function App() {
                 ],
                 i = items.indexOf(document.activeElement as HTMLElement);
               if (e.key === "Escape") {
+                e.stopPropagation();
                 setMenu(false);
                 document.querySelector<HTMLElement>(".switcher-btn")?.focus();
               }
@@ -723,100 +736,110 @@ function App() {
     );
   }
   function HandoffPanel() {
-    if (!handoff || handoff.sessionId !== session?.id) return null;
+    if (
+      !handoff ||
+      handoff.sessionId !== session?.id ||
+      handoff.status === "saved"
+    )
+      return null;
+    if (handoff.status === "failed")
+      return (
+        <div className="handoff-failed" role="alert">
+          <Icon name="alert" />
+          <div>
+            <strong>Go couldn't save your map</strong>
+            <p>
+              {handoff.reason ?? "The save could not be completed."} Your map
+              hasn't changed, and the {handoff.captureIds.length} finds are
+              still waiting.
+            </p>
+            <Button onClick={() => void sendToGo()}>Send again</Button>
+            <Button
+              quiet
+              onClick={() =>
+                void copyPrompt(
+                  JSON.stringify(
+                    {
+                      sessionId: handoff.sessionId,
+                      startedAt: handoff.startedAt,
+                      reason: handoff.reason,
+                      captureIds: handoff.captureIds,
+                    },
+                    null,
+                    2,
+                  ),
+                )
+              }
+            >
+              Copy details
+            </Button>
+          </div>
+        </div>
+      );
     return (
-      <div className="handoff-panel">
-        <ol className="steps">
-          <li>
-            <span>
-              {handoff.copied ? (
-                <>
-                  <Icon name="check" size={14} />
-                  Prompt copied
-                </>
-              ) : (
-                "Copy the prompt below"
-              )}
-              <small>
-                {handoff.opened
-                  ? "Go opened in a new tab"
-                  : "Open your Go agent"}
-              </small>
-            </span>
-          </li>
-          <li>Paste it into Go and send</li>
-          <li>Approve the save if Go asks</li>
-        </ol>
-        <div className="prompt-box">
+      <div className="handoff-panel" role="status">
+        <strong>Waiting for Go…</strong>
+        <p>
+          {handoff.captureIds.length} finds sent{" "}
+          {Math.max(
+            0,
+            Math.floor((Date.now() - Date.parse(handoff.startedAt)) / 60000),
+          )}{" "}
+          minutes ago
+        </p>
+        <div className="handoff-indeterminate" />
+        {handoff.status === "stalled" && (
+          <p>No answer from Go for 10 minutes. It may still be working.</p>
+        )}
+        <Button
+          quiet
+          onClick={() =>
+            void chrome.tabs.create({ url: state.config.agentUrl })
+          }
+        >
+          {handoff.status === "stalled" ? "Check Go" : "Open Go tab"}
+        </Button>
+        <Button
+          quiet
+          onClick={() => void action("handoff-cancel", { id: session!.id })}
+        >
+          Cancel
+        </Button>
+        <details>
+          <summary>Prompt sent to Go</summary>
           <textarea
             aria-label="Go processing prompt"
             readOnly
             value={handoff.prompt}
-            onFocus={(e) => e.target.select()}
           />
-          <IconButton
-            name="copy"
-            label="Copy prompt"
-            onClick={() =>
-              void copyPrompt(handoff.prompt).then((copied) =>
-                action("handoff", { id: session!.id, ...handoff, copied }),
-              )
-            }
-          />
-        </div>
-        <div className="waiting">
-          <span>
-            {handoff.status === "stalled"
-              ? "No saved update after 10 minutes. Check Go for a failed validation or pending approval."
-              : "Waiting for Go’s saved summary. Paste and send the prompt, then approve the save. Opening Go alone does not start processing."}
-          </span>
-          <Button
-            quiet
-            onClick={() => action("handoff-cancel", { id: session!.id })}
-          >
-            Stop waiting
+          <Button quiet onClick={() => void copyPrompt(handoff.prompt)}>
+            Copy prompt
           </Button>
-        </div>
+        </details>
       </div>
     );
   }
+  function Ready() {
+    return readyNote && handoff?.status === "saved" ? (
+      <ReadyNote
+        key={handoff.savedAt}
+        handoff={handoff}
+        onOpen={() => {
+          setReadyNote(false);
+          void action("map-seen", { id: handoff.sessionId });
+          openWorkspace("map");
+        }}
+        onDismiss={() => setReadyNote(false)}
+      />
+    ) : null;
+  }
   function GoFooter() {
-    const update = updated?.sessionId === session?.id ? updated : null,
-      hand = handoff?.sessionId === session?.id;
+    const hand =
+      handoff?.sessionId === session?.id && handoff?.status !== "saved";
     return (
       <footer className="p-foot">
         {hand ? (
           HandoffPanel()
-        ) : update ? (
-          <>
-            <div className="updated">
-              <span className="badge">
-                <Icon name="check" />
-              </span>
-              <div>
-                <strong>Map updated at {time(update.at)}</strong>
-                <span>
-                  {update.ideas} new ideas and {update.connections} new
-                  connections
-                </span>
-              </div>
-            </div>
-            <div className="foot-row">
-              <Button primary icon="map" onClick={() => openWorkspace("map")}>
-                Open map
-              </Button>
-              <Button
-                icon="practice"
-                onClick={() => {
-                  if (panel) openWorkspace("practice");
-                  else setView("practice");
-                  setUpdated(null);
-                }}
-              >
-                Practice
-              </Button>
-            </div>
-          </>
         ) : (
           <>
             <p className="handoff-line">
@@ -935,6 +958,8 @@ function App() {
       </section>
     );
   }
+  if ((!state || !config) && view === "practice" && !panel)
+    return <PracticeLoading onRetry={() => void action("state")} />;
   if (!state || !config)
     return (
       <main className="loading" role="status">
@@ -943,7 +968,11 @@ function App() {
     );
   return (
     <div className={panel ? "panel" : "ws v2"}>
-      <div className="app-surface" inert={settings || preferences}>
+      <div
+        className="app-surface"
+        inert={settings || preferences}
+        hidden={panel && (settings || preferences)}
+      >
         <header className={panel ? "p-head" : "topbar"}>
           <Brand
             onClick={() => {
@@ -980,7 +1009,7 @@ function App() {
                 value={view}
                 options={[
                   { value: "summary", label: "Summary" },
-                  { value: "map", label: "Map" },
+                  { value: "map", label: "Map", attention: mapDot },
                   { value: "practice", label: "Practice" },
                   {
                     value: "sources",
@@ -988,7 +1017,13 @@ function App() {
                     count: session.captures.length,
                   },
                 ]}
-                onChange={setView}
+                onChange={(next) => {
+                  setView(next);
+                  if (next === "map" && session) {
+                    setReadyNote(false);
+                    void action("map-seen", { id: session.id });
+                  }
+                }}
               />
             </>
           )}
@@ -1010,7 +1045,7 @@ function App() {
                 primary
                 icon="handoff"
                 aria-label={
-                  handoff
+                  waiting
                     ? "Waiting for Go"
                     : `Send to Go, ${pending} new finds`
                 }
@@ -1019,82 +1054,48 @@ function App() {
                   pending === 0 ||
                   busy ||
                   !state.config.token ||
-                  !!handoff
+                  waiting
                 }
                 onClick={() => void sendToGo()}
               >
                 <span className="label">
-                  {handoff
-                    ? handoff.status === "stalled"
+                  {waiting
+                    ? handoff?.status === "stalled"
                       ? "Check Go"
                       : "Waiting for Go…"
                     : "Send to Go"}
                 </span>
-                {!handoff && pending > 0 && <Chip>{pending} new</Chip>}
+                {!waiting && pending > 0 && <Chip>{pending} new</Chip>}
               </Button>
             )}
-            {panel ? (
-              <>
-                <IconButton
-                  name="workspace"
-                  label="Open full workspace"
-                  onClick={() => openWorkspace()}
-                />
-                <IconButton
-                  name="settings"
-                  label="Settings"
-                  onClick={() => setSettings(true)}
-                />
-              </>
-            ) : (
-              <div className="more-anchor">
-                <IconButton
-                  name="more"
-                  label="More actions"
-                  onClick={() => setMore(!more)}
-                />
-                {more && (
-                  <div className="more-menu" onClick={() => setMore(false)}>
-                    <Button quiet onClick={rebuild}>
-                      Rebuild map with Go
-                    </Button>
-                    <Button
-                      quiet
-                      onClick={() => {
-                        setList(!list);
-                        setView("map");
-                      }}
-                    >
-                      Show map as {list ? "map" : "list"}
-                    </Button>
-                    <Button
-                      quiet
-                      onClick={() => {
-                        const next =
-                          document.documentElement.dataset.theme === "dark" ||
-                          (theme === "system" &&
-                            matchMedia("(prefers-color-scheme: dark)").matches)
-                            ? "light"
-                            : "dark";
-                        setTheme(next);
-                        void chrome.storage.local.set({ uiTheme: next });
-                      }}
-                    >
-                      Switch light / dark
-                    </Button>
-                    <Button quiet onClick={() => void action("open-panel")}>
-                      Back to side panel
-                    </Button>
-                    <Button quiet onClick={() => setPreferences(true)}>
-                      Session preferences
-                    </Button>
-                    <Button quiet onClick={() => setSettings(true)}>
-                      Settings
-                    </Button>
-                  </div>
-                )}
-              </div>
+            {!panel && handoff?.status === "saved" && (
+              <span className="map-saved">
+                <Icon name="check" size={14} /> Map updated{" "}
+                {time(handoff.savedAt!)}
+              </span>
             )}
+            {panel ? (
+              <IconButton
+                name="workspace"
+                label="Open full workspace"
+                onClick={() => openWorkspace()}
+              />
+            ) : (
+              <IconButton
+                name="panel"
+                label="Back to side panel"
+                onClick={() => void action("open-panel")}
+              />
+            )}
+            <IconButton
+              name="settings"
+              label="Settings"
+              aria-pressed={settings || preferences}
+              onClick={() => {
+                setSettingsSection(undefined);
+                setSettings(true);
+              }}
+            />
           </div>
         </header>
         {panel ? (
@@ -1104,6 +1105,7 @@ function App() {
             <>
               {SessionSwitcher()}
               {CaptureRow()}
+              {Ready()}
               <div className="p-scroll" ref={trailScroll}>
                 <div className="trail-head">
                   <h2>Your trail</h2>
@@ -1176,15 +1178,7 @@ function App() {
                   {handoff?.sessionId === session.id && (
                     <div className="workspace-handoff">{HandoffPanel()}</div>
                   )}
-                  {updated?.sessionId === session.id && (
-                    <div className="workspace-update" role="status">
-                      <Icon name="check" size={16} />
-                      Map updated at {time(updated.at)}
-                      <Button quiet onClick={() => setUpdated(null)}>
-                        Dismiss
-                      </Button>
-                    </div>
-                  )}
+                  {Ready()}
                   <div className="view">
                     {view === "summary" ? (
                       <Summary
@@ -1205,25 +1199,52 @@ function App() {
                         }}
                       />
                     ) : view === "map" ? (
-                      <MapView
-                        key={session.id}
-                        session={session}
-                        list={list}
-                        mapRequest={mapRequest}
-                        selected={selected}
-                        onSelect={setSelected}
-                        onRebuild={rebuild}
-                        onExplain={explainAgain}
-                        onPractice={(id) => {
-                          setPracticeEdge(id || undefined);
-                          setView("practice");
-                        }}
-                      />
+                      <>
+                        <div className="map-view-toolbar">
+                          <Segmented
+                            label="Map display"
+                            value={list ? "list" : "map"}
+                            options={[
+                              { value: "map", label: "Map", icon: "map" },
+                              { value: "list", label: "List", icon: "list" },
+                            ]}
+                            onChange={(v) => setList(v === "list")}
+                          />
+                        </div>
+                        <MapView
+                          key={session.id}
+                          session={session}
+                          list={list}
+                          mapRequest={mapRequest}
+                          selected={selected}
+                          onSelect={setSelected}
+                          onRebuild={rebuild}
+                          onExplain={explainAgain}
+                          onPractice={(id) => {
+                            setPracticeEdge(id || undefined);
+                            setView("practice");
+                          }}
+                        />
+                      </>
                     ) : view === "practice" ? (
                       <Practice
                         key={`${session.id}:${session.version}:${practiceEdge ?? ""}`}
                         session={session}
                         edgeId={practiceEdge}
+                        preferences={state.practicePreferences}
+                        connected={!!state.config.token}
+                        onSend={() => void sendToGo()}
+                        onGenerate={(text) => void sendToGo(text, "rebuild")}
+                        onConnect={() => {
+                          setSettingsSection("Connection");
+                          setSettings(true);
+                        }}
+                        onPracticeState={(practice) =>
+                          void action("practice-state", {
+                            id: session.id,
+                            practice,
+                          })
+                        }
                         onMap={(brighten) => {
                           setMapRequest({ memory: true, brighten });
                           setSelected(null);
@@ -1299,334 +1320,66 @@ function App() {
         )}
       </div>
       {(settings || preferences) && (
-        <div
-          className="modal-backdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setSettings(false);
+        <Settings
+          panel={panel}
+          session={session}
+          connected={!!state.config.token}
+          connectionError={!!state.error}
+          backend={state.config.backend}
+          agentUrl={state.config.agentUrl}
+          synced={synced}
+          theme={theme}
+          mapList={list}
+          state={state}
+          scroll={settingsScroll}
+          initialSection={preferences ? "Session" : settingsSection}
+          onClose={() => {
+            setSettings(false);
+            setPreferences(false);
+            setSettingsSection(undefined);
+          }}
+          onTheme={(v) => {
+            setTheme(v);
+            void chrome.storage.local.set({ uiTheme: v });
+          }}
+          onMapList={(v) => {
+            setList(v);
+            void chrome.storage.local.set({ mapList: v });
+          }}
+          onPreference={(v) => action("preferences", v)}
+          onSession={patch}
+          onConnection={async (config) => {
+            if (!(await grant())) return false;
+            const value = await action("config", { config });
+            if (value) {
+              setConfig(value.config);
+              showToast("Connection saved");
+              void sync();
+              return true;
+            }
+            return false;
+          }}
+          onSearchOffer={(value) => void action("ask-on-search", { value })}
+          onUnexclude={(url) => void action("unexclude", { url })}
+          onExport={exported}
+          onRebuild={() => {
+            rebuild();
+            setSettings(false);
+            setPreferences(false);
+          }}
+          onDelete={() => {
+            if (
+              session &&
+              confirm(
+                "Delete this session, its captures, and study progress locally and on the server? Offline deletion will be retried.",
+              )
+            ) {
+              void action("delete", { id: session.id });
               setPreferences(false);
+              setSettings(false);
             }
           }}
-        >
-          <section
-            className="settings-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={settings ? "Workspace settings" : "Session preferences"}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                setSettings(false);
-                setPreferences(false);
-              }
-              if (e.key === "Tab") {
-                const els = [
-                  ...e.currentTarget.querySelectorAll<HTMLElement>(
-                    "button,input,select,textarea,[href]",
-                  ),
-                ].filter((el) => !el.hasAttribute("disabled"));
-                const i = els.indexOf(document.activeElement as HTMLElement);
-                if (e.shiftKey && i === 0) {
-                  e.preventDefault();
-                  els.at(-1)?.focus();
-                }
-                if (!e.shiftKey && i === els.length - 1) {
-                  e.preventDefault();
-                  els[0]?.focus();
-                }
-              }
-            }}
-          >
-            <IconButton
-              name="x"
-              label="Close settings"
-              autoFocus
-              onClick={() => {
-                setSettings(false);
-                setPreferences(false);
-              }}
-            />
-            {settings ? (
-              <>
-                <h1>Connect your workspace</h1>
-                <p>
-                  Your personal token connects this extension and Go to the same
-                  saved research. It stays in local extension storage.
-                </p>
-                <label>
-                  Backend URL
-                  <input
-                    value={config.backend}
-                    onChange={(e) =>
-                      setConfig({ ...config, backend: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Personal bearer token
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    value={config.token}
-                    onChange={(e) =>
-                      setConfig({ ...config, token: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Go agent URL
-                  <input
-                    value={config.agentUrl}
-                    onChange={(e) =>
-                      setConfig({ ...config, agentUrl: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Appearance
-                  <select
-                    aria-label="Appearance"
-                    value={theme}
-                    onChange={(e) => {
-                      setTheme(e.target.value);
-                      void chrome.storage.local.set({
-                        uiTheme: e.target.value,
-                      });
-                    }}
-                  >
-                    <option value="system">Follow system</option>
-                    <option value="light">Light</option>
-                    <option value="dark">Dark</option>
-                  </select>
-                </label>
-                <Button
-                  primary
-                  disabled={busy}
-                  onClick={async () => {
-                    if (await grant()) {
-                      const value = await action("config", { config });
-                      if (value) {
-                        setSettings(false);
-                        showToast("Connection saved");
-                        void sync();
-                      }
-                    }
-                  }}
-                >
-                  Save connection
-                </Button>
-                <p className="muted">
-                  Automatic collection requires website access. Only an active
-                  session’s included tabs are recorded. Incognito is disabled.
-                  Google searches join automatically while collecting. Keyboard
-                  shortcuts: Alt+Shift+R opens the side panel; Alt+Shift+M opens
-                  the workspace; Alt+Shift+B hides or shows the bunny;
-                  Alt+Shift+H saves selected text. On Mac, Alt is Option.
-                  Reassign these at chrome://extensions/shortcuts if needed.
-                </p>
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={context?.askOnSearch !== false}
-                    onChange={(e) =>
-                      void action("ask-on-search", { value: e.target.checked })
-                    }
-                  />
-                  Offer to start a rabbit hole when I search Google
-                </label>
-                {session && (
-                  <Button
-                    quiet
-                    onClick={() => {
-                      setSettings(false);
-                      setPreferences(true);
-                    }}
-                  >
-                    Session preferences & data
-                  </Button>
-                )}
-              </>
-            ) : (
-              session && (
-                <>
-                  <h1>Session preferences</h1>
-                  <label>
-                    Explanation depth
-                    <select
-                      aria-label="Explanation depth"
-                      value={session.settings.depth}
-                      onChange={(e) =>
-                        patch({
-                          settings: {
-                            ...session.settings,
-                            depth: e.target.value,
-                          },
-                        })
-                      }
-                    >
-                      {["brief", "balanced", "deep"].map((v) => (
-                        <option key={v}>{v}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Analogies
-                    <input
-                      value={analogyDraft}
-                      maxLength={300}
-                      onChange={(e) => setAnalogyDraft(e.target.value)}
-                      onBlur={() =>
-                        patch({
-                          settings: {
-                            ...session.settings,
-                            analogy: analogyDraft,
-                          },
-                        })
-                      }
-                    />
-                  </label>
-                  <label className="check">
-                    <input
-                      type="checkbox"
-                      checked={session.settings.articleCapture}
-                      onChange={(e) =>
-                        patch({
-                          settings: {
-                            ...session.settings,
-                            articleCapture: e.target.checked,
-                          },
-                        })
-                      }
-                    />
-                    Automatically capture readable article text
-                  </label>
-                  <label className="check">
-                    <input
-                      type="checkbox"
-                      checked={session.settings.autoHighlights ?? false}
-                      onChange={(e) =>
-                        patch({
-                          settings: {
-                            ...session.settings,
-                            autoHighlights: e.target.checked,
-                          },
-                        })
-                      }
-                    />
-                    Save text selections automatically
-                  </label>
-                  <p className="muted">
-                    Opt in for this rabbit hole. Selecting page text saves a
-                    highlight after a short pause, without a shortcut. Editable
-                    fields are excluded. Turn this off if you select only to
-                    focus your eyes.
-                  </p>
-                  <Button
-                    icon="minus"
-                    onClick={async () => {
-                      setPreferences(false);
-                      await action("reading-mode");
-                    }}
-                  >
-                    Read without sidebar
-                  </Button>
-                  <fieldset>
-                    <legend>Study activities</legend>
-                    {["quiz", "matching", "connection", "flashcard"].map(
-                      (v) => (
-                        <label className="check" key={v}>
-                          <input
-                            type="checkbox"
-                            checked={session.settings.activities.includes(
-                              v as any,
-                            )}
-                            onChange={(e) => {
-                              const activities = e.target.checked
-                                ? [...session.settings.activities, v]
-                                : session.settings.activities.filter(
-                                    (a) => a !== v,
-                                  );
-                              if (activities.length)
-                                void patch({
-                                  settings: { ...session.settings, activities },
-                                });
-                            }}
-                          />
-                          {v === "connection"
-                            ? "Explain the connection"
-                            : v === "flashcard"
-                              ? "Flashcards"
-                              : v === "matching"
-                                ? "Matching"
-                                : "Quiz"}
-                        </label>
-                      ),
-                    )}
-                  </fieldset>
-                  <p className="muted">
-                    Capture settings apply now. Explanation depth and study
-                    preferences apply the next time you process or rebuild with
-                    Go. Saved material won’t silently regenerate.
-                  </p>
-                  <label>
-                    Rename session
-                    <input
-                      value={rename}
-                      placeholder={session.title}
-                      maxLength={140}
-                      onChange={(e) => setRename(e.target.value)}
-                    />
-                  </label>
-                  <div className="settings-actions">
-                    <Button
-                      disabled={!rename.trim()}
-                      onClick={() => patch({ title: rename.trim() })}
-                    >
-                      Rename
-                    </Button>
-                    <Button onClick={() => patch({ status: "finished" })}>
-                      Finish session
-                    </Button>
-                    <Button onClick={() => exported("json")}>
-                      Export JSON
-                    </Button>
-                  </div>
-                  <h2 className="export-heading">
-                    Take it to your study tools
-                  </h2>
-                  <div className="settings-actions">
-                    <Button onClick={() => exported("anki")}>Anki (CSV)</Button>
-                    <Button onClick={() => exported("quizlet")}>
-                      Copy for Quizlet
-                    </Button>
-                    <Button onClick={() => exported("markdown")}>
-                      Markdown / Obsidian
-                    </Button>
-                    <Button
-                      className="danger"
-                      onClick={() => {
-                        if (
-                          confirm(
-                            "Delete this session, its captures, and study progress locally and on the server? Offline deletion will be retried.",
-                          )
-                        ) {
-                          void action("delete", { id: session.id });
-                          setPreferences(false);
-                        }
-                      }}
-                    >
-                      Delete session
-                    </Button>
-                  </div>
-                </>
-              )
-            )}
-            {error && (
-              <p className="error" role="alert">
-                {error}
-              </p>
-            )}
-          </section>
-        </div>
+        />
       )}
       <Toast message={toast} />
     </div>

@@ -179,6 +179,7 @@ export type Session = {
   processed: string[];
   captures: CaptureData[];
   attempts: Attempt[];
+  practice?: { dismissedHarder?: string[] };
 };
 export const Review = z.object({
   id: Id,

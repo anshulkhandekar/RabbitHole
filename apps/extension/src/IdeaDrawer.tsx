@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 import type { Session } from "../../../packages/contracts/src/index";
 import type { Selection } from "./MapView";
 import { deriveFlags, deriveMemory } from "./practice-model";
@@ -28,6 +28,16 @@ export function IdeaDrawer({
     setMore(false);
     setExplain(false);
   }, [selected?.id]);
+  const scroll = useRef<HTMLDivElement>(null),
+    positions = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    const key = `${session.id}:${selected?.kind}:${selected?.id}`,
+      el = scroll.current;
+    if (el) el.scrollTop = positions.current.get(key) ?? 0;
+    return () => {
+      if (el) positions.current.set(key, el.scrollTop);
+    };
+  }, [session.id, selected?.kind, selected?.id]);
   const a = session.analysis!;
   const c =
       selected?.kind === "concept"
@@ -57,7 +67,7 @@ export function IdeaDrawer({
           onClick={() => onSelect(null)}
         />
       </header>
-      <div className="drawer-body">
+      <div className="drawer-body" ref={scroll}>
         {c ? (
           <>
             <h2>{c.label}</h2>

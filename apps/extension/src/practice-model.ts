@@ -190,3 +190,246 @@ export function connectionQueue(
     },
   ];
 }
+
+export type Lane = "new" | "review" | "harder";
+export type Activity = StudyItem["type"] | "mixed";
+export type PracticeTopic = {
+  id: string;
+  name: string;
+  items: StudyItem[];
+  total: number;
+  untested: number;
+  strong: number;
+  shaky: number;
+  confidentMisses: number;
+  counts: Record<StudyItem["type"], number>;
+  basicTotal: number;
+  basicTried: number;
+  rightWithoutHints: number;
+  lanes: Record<Lane, StudyItem[]>;
+  exhausted: Record<Lane, boolean>;
+};
+export const isBasic = (item: StudyItem) =>
+  !item.level || item.level === "understand";
+export function harderReady(topic: PracticeTopic) {
+  const reason = {
+    basicTotal: topic.basicTotal,
+    basicTried: topic.basicTried,
+    remaining: topic.basicTotal - topic.basicTried,
+    rightWithoutHints: topic.rightWithoutHints,
+    requiredRight: Math.ceil(topic.basicTotal * 0.75),
+    confidentMisses: topic.confidentMisses,
+  };
+  return {
+    ready:
+      reason.basicTotal > 0 &&
+      reason.remaining === 0 &&
+      reason.rightWithoutHints >= reason.requiredRight &&
+      reason.confidentMisses === 0,
+    reason,
+  };
+}
+export function harderLockReason(topic: PracticeTopic) {
+  const { ready, reason: r } = harderReady(topic);
+  if (ready) return "";
+  if (!r.basicTotal) return "Ask Go for basic questions first.";
+  if (r.remaining)
+    return `Try all basics first: ${r.remaining} still untested.`;
+  if (r.confidentMisses)
+    return `Review ${r.confidentMisses} outstanding confident ${r.confidentMisses === 1 ? "miss" : "misses"} first.`;
+  return `Get at least ${r.requiredRight} of ${r.basicTotal} basics right without hints (${r.rightWithoutHints} so far).`;
+}
+export function practiceHub(
+  analysis: AnalysisData,
+  attempts: Attempt[],
+  now = Date.now(),
+) {
+  const explicit = analysis.concepts.filter((c) => c.main),
+    roots = explicit.length
+      ? explicit
+      : analysis.concepts.filter((c) => !c.parentId),
+    rootIds = new Set(roots.map((c) => c.id)),
+    byId = new Map(analysis.concepts.map((c) => [c.id, c]));
+  function topicOf(id: string): string | undefined {
+    const visited = new Set<string>();
+    while (!visited.has(id)) {
+      if (rootIds.has(id)) return id;
+      visited.add(id);
+      const parent = byId.get(id)?.parentId;
+      if (!parent) return;
+      id = parent;
+    }
+  }
+  const latest = new Map<string, Attempt>();
+  for (const a of [...attempts].sort((a, b) =>
+    a.timestamp.localeCompare(b.timestamp),
+  ))
+    latest.set(a.studyId, a);
+  function summarize(
+    id: string,
+    name: string,
+    items: StudyItem[],
+  ): PracticeTopic {
+    const counts = { quiz: 0, matching: 0, connection: 0, flashcard: 0 };
+    let untested = 0,
+      strong = 0,
+      shaky = 0,
+      confidentMisses = 0,
+      basicTried = 0,
+      rightWithoutHints = 0;
+    const missed: StudyItem[] = [];
+    const confident = new Set<string>();
+    for (const item of items) {
+      counts[item.type]++;
+      const a = latest.get(item.id);
+      if (!a) {
+        untested++;
+        continue;
+      }
+      const family = item.variantOf ?? item.id,
+        familyIds = new Set(
+          items
+            .filter((i) => (i.variantOf ?? i.id) === family)
+            .map((i) => i.id),
+        ),
+        relevant = attempts.filter((a) => familyIds.has(a.studyId)),
+        memory = deriveMemory(analysis, relevant, now),
+        flags = deriveFlags(analysis, relevant),
+        ids = conceptsOf(item),
+        result = attemptResult(item, a);
+      if (isBasic(item)) {
+        basicTried++;
+        if (result === "right" && !lucky(a)) rightWithoutHints++;
+      }
+      const familyLast = [...relevant]
+        .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+        .at(-1);
+      const familyItem = items.find((i) => i.id === familyLast?.studyId);
+      if (
+        familyLast &&
+        familyItem &&
+        attemptResult(familyItem, familyLast) !== "right" &&
+        !missed.some((i) => (i.variantOf ?? i.id) === family)
+      )
+        missed.push(familyItem);
+      if (ids.some((id) => flags[id] === "misconception")) {
+        confidentMisses++;
+        confident.add(item.id);
+      } else if (ids.length && ids.every((id) => memory[id] === "strong"))
+        strong++;
+      else shaky++;
+    }
+    missed.sort(
+      (a, b) => Number(confident.has(b.id)) - Number(confident.has(a.id)),
+    );
+    const lanes = {
+      new: items
+        .filter((i) => !latest.has(i.id))
+        .sort(
+          (a, b) =>
+            Number(isBasic(b)) - Number(isBasic(a)) ||
+            Number(!!a.variantOf) - Number(!!b.variantOf),
+        ),
+      review: [
+        ...new Map(retryItems(items, missed).map((i) => [i.id, i])).values(),
+      ],
+      harder: items.filter((i) => !isBasic(i) && !latest.has(i.id)),
+    };
+    return {
+      id,
+      name,
+      items,
+      total: items.length,
+      counts,
+      untested,
+      strong,
+      shaky,
+      confidentMisses,
+      basicTotal: items.filter(isBasic).length,
+      basicTried,
+      rightWithoutHints,
+      lanes,
+      exhausted: {
+        new: !lanes.new.length,
+        review: !lanes.review.length,
+        harder: !lanes.harder.length,
+      },
+    };
+  }
+  const topics = roots.map((c) =>
+    summarize(
+      c.id,
+      c.label,
+      analysis.studyItems.filter((i) =>
+        [...new Set([...i.conceptIds, ...conceptsOf(i)])].some(
+          (id) => topicOf(id) === c.id,
+        ),
+      ),
+    ),
+  );
+  return {
+    all: summarize("all", "All topics", analysis.studyItems),
+    topics,
+    coverage: {
+      emptyTopics: topics.filter((t) => !t.total),
+      missingLanes: topics.flatMap((t) =>
+        (["new", "review", "harder"] as Lane[])
+          .filter(
+            (l) =>
+              !t.items.some((i) =>
+                l === "harder"
+                  ? !isBasic(i)
+                  : l === "new"
+                    ? isBasic(i)
+                    : !!i.variantOf,
+              ),
+          )
+          .map((lane) => ({ topicId: t.id, topicName: t.name, lane })),
+      ),
+    },
+  };
+}
+export function roundQueue(
+  topic: PracticeTopic,
+  lane: Lane,
+  activity: Activity,
+  size: number,
+  readyTopics?: PracticeTopic[],
+) {
+  const allowed =
+    lane === "harder" && readyTopics
+      ? new Set(
+          readyTopics
+            .filter((t) => harderReady(t).ready)
+            .flatMap((t) => t.lanes.harder.map((i) => i.id)),
+        )
+      : undefined;
+  const pool = topic.lanes[lane].filter(
+    (i) =>
+      (activity === "mixed" || i.type === activity) &&
+      (!allowed || allowed.has(i.id)),
+  );
+  if (activity !== "mixed" || lane === "review") return pool.slice(0, size);
+  const pattern: StudyItem["type"][] = [
+      "quiz",
+      "matching",
+      "connection",
+      "flashcard",
+    ],
+    result: StudyItem[] = [];
+  let cursor = 0;
+  while (pool.length && result.length < size) {
+    const basic = lane === "new" && pool.some(isBasic),
+      eligible = pool.filter((i) => !basic || isBasic(i));
+    let chosen: StudyItem | undefined;
+    for (let n = 0; n < pattern.length; n++) {
+      const type = pattern[cursor++ % pattern.length];
+      chosen = eligible.find((i) => i.type === type);
+      if (chosen) break;
+    }
+    if (!chosen) break;
+    result.push(chosen);
+    pool.splice(pool.indexOf(chosen), 1);
+  }
+  return result;
+}

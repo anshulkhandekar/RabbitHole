@@ -18,7 +18,7 @@
   /* Ink */
   --ink: #17171A;
   --ink-2: #55555C;
-  --ink-3: #8D8D94;
+  --ink-3: #6E6E75;
 
   /* Primary action = ink. Buttons are black-on-white in light, white-on-black in dark. */
   --primary: #17171A;
@@ -93,7 +93,7 @@
   :root:not([data-theme="light"]) {
     --paper: #0F0F11; --surface: #18181B; --surface-sunk: #202024;
     --line: #2A2A2F; --line-strong: #3A3A41;
-    --ink: #EDEDEF; --ink-2: #A9A9B2; --ink-3: #74747D;
+    --ink: #EDEDEF; --ink-2: #A9A9B2; --ink-3: #8B8B94;
     --primary: #EDEDEF; --primary-hover: #FFFFFF; --on-primary: #111113;
     --primary-soft: #26262B; --primary-ink: #EDEDEF;
     --carrot: #FF7A2E; --carrot-hover: #FF8E4D; --carrot-soft: #351C0C; --carrot-ink: #FFAE7A;
@@ -108,7 +108,7 @@
 :root[data-theme="dark"] {
   --paper: #0F0F11; --surface: #18181B; --surface-sunk: #202024;
   --line: #2A2A2F; --line-strong: #3A3A41;
-  --ink: #EDEDEF; --ink-2: #A9A9B2; --ink-3: #74747D;
+  --ink: #EDEDEF; --ink-2: #A9A9B2; --ink-3: #8B8B94;
   --primary: #EDEDEF; --primary-hover: #FFFFFF; --on-primary: #111113;
   --primary-soft: #26262B; --primary-ink: #EDEDEF;
   --carrot: #FF7A2E; --carrot-hover: #FF8E4D; --carrot-soft: #351C0C; --carrot-ink: #FFAE7A;

@@ -72,6 +72,7 @@ try {
   await ui.getByLabel("Go agent URL").fill("https://handoff.example/agent");
   // Grant website access through the extension UI; Chrome headless has no native permission bubble.
   await ui.getByRole("button", { name: "Save connection" }).click();
+  await ui.getByRole("button", { name: "Close settings" }).click();
   await ui.getByRole("button", { name: "Start collecting" }).waitFor();
   const research = await context.newPage();
   await research.route("https://www.google.com/**", (r) =>
@@ -321,11 +322,12 @@ try {
   await ui.setViewportSize({ width: 320, height: 850 });
   await ui.bringToFront();
   await ui.getByRole("button", { name: "Send to Go", exact: true }).click();
+  await ui.getByText("Prompt sent to Go", { exact: true }).click();
   const handoffPrompt = await ui
     .getByLabel("Go processing prompt")
     .inputValue();
   assert.ok(handoffPrompt.includes(sessionId));
-  await ui.getByText("Paste it into Go and send", { exact: true }).waitFor();
+  await ui.getByText("Waiting for Go…", { exact: true }).waitFor();
   assert.equal(await ui.getByText(/Map updated at/).count(), 0);
   await ui.screenshot({
     path: "test-results/sidebar-handoff.png",
@@ -501,7 +503,10 @@ try {
   await ui.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await ui.getByRole("tab", { name: "Summary", exact: true }).click();
   await ui.getByRole("heading", { name: fixture.title, exact: true }).waitFor();
-  await ui.getByRole("button", { name: "Dismiss", exact: true }).click();
+  if (
+    await ui.getByRole("button", { name: "Dismiss", exact: true }).isVisible()
+  )
+    await ui.getByRole("button", { name: "Dismiss", exact: true }).click();
   await ui.getByRole("tab", { name: "Map", exact: true }).click();
   await expect(ui.locator(".react-flow__node")).toHaveCount(6);
   await ui.locator('.react-flow__node[data-id="n1"]').click();
@@ -557,7 +562,8 @@ try {
     });
   }
   await ui.getByRole("tab", { name: "Practice", exact: true }).click();
-  await ui.getByRole("button", { name: /^Explain the connection/ }).click();
+  await ui.getByRole("tab", { name: /^Explain the connection/ }).click();
+  await ui.getByRole("button", { name: /^Start / }).click();
   await ui
     .getByLabel("Your explanation")
     .fill("It runs independent operations at once.");
@@ -569,7 +575,8 @@ try {
   await ui
     .getByRole("button", { name: "Back to practice", exact: true })
     .click();
-  await ui.getByRole("button", { name: /^Quiz / }).click();
+  await ui.getByRole("tab", { name: /^Quiz / }).click();
+  await ui.getByRole("button", { name: /^Start / }).click();
   await ui.keyboard.press("2");
   await ui.getByRole("heading", { name: /That’s right/ }).waitFor();
   await ui.getByRole("button", { name: /^Continue/ }).click();
@@ -577,7 +584,8 @@ try {
   await ui
     .getByRole("button", { name: "Back to practice", exact: true })
     .click();
-  await ui.getByRole("button", { name: /^Matching / }).click();
+  await ui.getByRole("tab", { name: /^Matching / }).click();
+  await ui.getByRole("button", { name: /^Start / }).click();
   await ui.locator('[data-left="0"]').click();
   await ui.locator('[data-right="1"]').click(); // Slip: no pair may lock.
   await expect(ui.locator(".match-tile-v2.locked")).toHaveCount(0);
@@ -652,7 +660,8 @@ try {
     ui.getByRole("button", { name: "Switch rabbit hole", exact: true }),
   ).toBeFocused();
   await ui.getByRole("button", { name: "Settings", exact: true }).click();
-  await ui.getByLabel("Appearance", { exact: true }).selectOption("dark");
+  await ui.getByRole("button", { name: "Appearance", exact: true }).click();
+  await ui.getByRole("radio", { name: "Dark", exact: true }).check();
   await ui.getByRole("button", { name: "Close settings", exact: true }).click();
   await ui.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   assert.equal(
@@ -662,7 +671,8 @@ try {
   await ui.reload();
   await ui.locator('html[data-theme="dark"]').waitFor();
   await ui.getByRole("button", { name: "Settings", exact: true }).click();
-  await ui.getByLabel("Appearance", { exact: true }).selectOption("system");
+  await ui.getByRole("button", { name: "Appearance", exact: true }).click();
+  await ui.getByRole("radio", { name: "Follow system", exact: true }).check();
   await ui.getByRole("button", { name: "Close settings", exact: true }).click();
   await ui.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
   console.log("CHECK wait for fonts");
