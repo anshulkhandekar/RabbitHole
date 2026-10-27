@@ -5,6 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { AnalysisInput, Id } from "../../../packages/contracts/src/index";
 import { Store, DomainError } from "./store";
+import { QuestionInput } from "./question-model";
 import { AnalysisDrafts } from "./analysis-drafts";
 export function createApp(
   store: Store,
@@ -209,6 +210,16 @@ export function createApp(
         },
       },
       (p) => run(() => drafts.save(owner, p)),
+    );
+    server.registerTool(
+      "ValidateSessionQuestions",
+      {
+        description:
+          "Read-only question preflight for an EXISTING saved map. Send sessionId, current expectedVersion and only NEW questions referencing saved conceptIds. Do not send captureIds, evidence, map concepts or edges: the server inherits the exact visible processed source IDs and preserves the saved map and existing questions. Returns saveArguments for normal SaveValidatedAnalysis approval. Read GetSession and its evidence first; do not invent questions unsupported by the saved explanations.",
+        inputSchema: QuestionInput.shape,
+        annotations: { readOnlyHint: true },
+      },
+      (p) => run(() => drafts.validateQuestions(owner, p)),
     );
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

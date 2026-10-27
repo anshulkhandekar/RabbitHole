@@ -3,6 +3,7 @@ import {
   AnalysisInput,
   type AnalysisData,
 } from "../../../packages/contracts/src/index";
+import { QuestionInput, appendQuestions } from "./question-model";
 import { Store, DomainError } from "./store";
 
 // A bounded, temporary cache of validated input, never a saved session analysis.
@@ -54,6 +55,25 @@ export class AnalysisDrafts {
       },
       next: "Call SaveValidatedAnalysis with saveArguments to request normal user approval. Do not retype the guide. Nothing has been saved yet.",
     };
+  }
+  validateQuestions(owner: string, input: unknown) {
+    const request = QuestionInput.parse(input),
+      session = this.store.get(owner, request.sessionId);
+    if (request.expectedVersion !== session.version)
+      throw new DomainError(
+        409,
+        `Stale version: current version ${session.version}. Re-read GetSession before adding questions.`,
+      );
+    let payload: AnalysisData;
+    try {
+      payload = appendQuestions(session, request.questions);
+    } catch (e) {
+      throw new DomainError(
+        422,
+        e instanceof Error ? e.message : "Invalid questions",
+      );
+    }
+    return this.validate(owner, payload);
   }
   save(
     owner: string,

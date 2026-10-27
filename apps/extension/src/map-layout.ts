@@ -45,7 +45,12 @@ const positionCache = new Map<
   string,
   Promise<{
     nodes: IdeaPosition[];
-    rows: { depth: number | null; y: number; capture?: CaptureData }[];
+    rows: {
+      depth: number | null;
+      y: number;
+      capture?: CaptureData;
+      label?: string;
+    }[];
   }>
 >();
 const previousLayouts = new Map<
@@ -71,12 +76,17 @@ export function cachedLayoutIdeas(
       const before = await previous?.catch(() => undefined);
       if (!before) return layout;
       for (const row of layout.rows) {
-        const members = layout.nodes.filter((n) => n.depth === row.depth),
+        const members = layout.nodes.filter((n) =>
+            row.label !== undefined
+              ? n.row === layout.rows.indexOf(row)
+              : n.depth === row.depth,
+          ),
           fixed = members.filter((n) =>
             before.nodes.some(
               (old) =>
                 old.id === n.id &&
                 old.depth === n.depth &&
+                (analysis.edges.length > 0 || old.row === n.row) &&
                 old.width === n.width &&
                 old.height === n.height,
             ),
@@ -119,6 +129,45 @@ export async function layoutIdeas(
     );
   const edges = mergeEdges(analysis.edges),
     ids = new Set(analysis.concepts.map((c) => c.id));
+  if (!edges.length) {
+    const columns = Math.min(3, Math.ceil(Math.sqrt(analysis.concepts.length))),
+      nodes: IdeaPosition[] = [],
+      rows: {
+        depth: number | null;
+        y: number;
+        capture?: CaptureData;
+        label?: string;
+      }[] = [];
+    const width = Math.max(...[...sizes.values()].map((s) => s.width));
+    let y = 80;
+    for (let start = 0; start < analysis.concepts.length; start += columns) {
+      const group = analysis.concepts.slice(start, start + columns),
+        row = rows.length;
+      const height = Math.max(
+        ...group.map((c) => sizes.get(c.id)?.height ?? 0),
+      );
+      group.forEach((c, i) => {
+        const size = sizes.get(c.id);
+        if (!size?.width || !size.height)
+          throw Error("Measure every idea before layout");
+        nodes.push({
+          id: c.id,
+          x: i * (width + 64),
+          y,
+          ...size,
+          row,
+          depth: depth.get(c.id) ?? null,
+        });
+      });
+      rows.push({
+        depth: null,
+        y: y + height / 2,
+        label: start === 0 ? "Unconnected ideas" : "",
+      });
+      y += height + 64;
+    }
+    return { nodes, rows };
+  }
   const graph = await new ELK().layout({
     id: "root",
     layoutOptions: {
@@ -152,7 +201,12 @@ export async function layoutIdeas(
   // ELK may create extra ranks for same-depth relationships. Preserve its crossing-minimised order,
   // then compact each depth into one measured row as required by the trail ruler.
   const nodes: IdeaPosition[] = [],
-    rows: { depth: number | null; y: number; capture?: CaptureData }[] = [];
+    rows: {
+      depth: number | null;
+      y: number;
+      capture?: CaptureData;
+      label?: string;
+    }[] = [];
   let y = 80;
   for (const [row, d] of levels.entries()) {
     const members = graph

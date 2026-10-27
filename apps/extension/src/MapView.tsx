@@ -170,16 +170,22 @@ function Ruler({
   const v = useViewport();
   return (
     <div className="depth-ruler">
-      {rows.map((r, i) => (
-        <div key={i} style={{ top: v.y + r.y * v.zoom }}>
-          <b>{r.depth ? `Depth ${r.depth}` : "Evidence missing"}</b>
-          <span>
-            {r.capture
-              ? `${sourceVerb(r.capture)} ${domain(r.capture.url)}`
-              : "Go inferred"}
-          </span>
-        </div>
-      ))}
+      {rows
+        .filter((r) => r.label !== "")
+        .map((r, i) => (
+          <div key={i} style={{ top: v.y + r.y * v.zoom }}>
+            <b>
+              {r.label ?? (r.depth ? `Depth ${r.depth}` : "Evidence missing")}
+            </b>
+            <span>
+              {r.label !== undefined
+                ? "No relationships recorded"
+                : r.capture
+                  ? `${sourceVerb(r.capture)} ${domain(r.capture.url)}`
+                  : "Go inferred"}
+            </span>
+          </div>
+        ))}
     </div>
   );
 }
@@ -690,7 +696,9 @@ export function MapView({
       </section>
     );
   return (
-    <div className="map-v2">
+    <div
+      className={`map-v2 ${!session.analysis.edges.length ? "no-connections" : ""}`}
+    >
       {list ? (
         <section className="idea-list">
           {session.analysis.concepts.map((c) => (
@@ -721,6 +729,18 @@ export function MapView({
             brighten={mapRequest?.brighten}
           />
         </ReactFlowProvider>
+      )}
+      {!list && !selected && !session.analysis.edges.length && (
+        <aside className="map-empty-connections" role="status">
+          <strong>No connections saved yet</strong>
+          <p>
+            These ideas are grouped here without implying relationships. Go can
+            review the saved evidence for connections.
+          </p>
+          <Button quiet onClick={onRebuild}>
+            Review connections with Go
+          </Button>
+        </aside>
       )}
       <IdeaDrawer
         session={session}

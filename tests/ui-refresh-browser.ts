@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { analysis } from "./support";
+import { analysis, capture } from "./support";
 import type {
   Session,
   Attempt,
@@ -272,6 +272,49 @@ try {
       await page.getByRole("button", { name: section, exact: true }).click();
       await shot(`settings-panel-${section.toLowerCase()}`, scheme);
     }
+    const hiddenCapture = { ...capture("c1"), tag: "none", references: [] };
+    await seed(
+      {
+        sessions: {
+          s1: { ...session, captures: [hiddenCapture], hidden: ["c1"] },
+        },
+      },
+      "sources",
+    );
+    await page
+      .getByRole("button", { name: "Find actions", exact: true })
+      .click();
+    await expect(
+      page.getByRole("menuitem", { name: "Show on map again", exact: true }),
+    ).toBeEnabled();
+    expect(
+      await page
+        .locator(".stop.is-hidden .stop-body")
+        .evaluate((el) => getComputedStyle(el).opacity),
+    ).toBe("1");
+    await shot("hidden-find-menu", scheme);
+    await page.keyboard.press("Escape");
+    await seed(
+      { sessions: { s1: { ...session, analysis: { ...a, edges: [] } } } },
+      "map",
+    );
+    await expect(
+      page.getByText("No connections saved yet", { exact: true }),
+    ).toBeVisible();
+    await expect(page.locator(".react-flow__node")).toHaveCount(4);
+    await expect
+      .poll(
+        async () =>
+          new Set(
+            await page
+              .locator(".react-flow__node")
+              .evaluateAll((nodes) =>
+                nodes.map((n) => n.getBoundingClientRect().x),
+              ),
+          ).size,
+      )
+      .toBeGreaterThan(1);
+    await shot("unconnected-map", scheme);
     const hand = {
       sessionId: "s1",
       prompt: "Synthetic fixture",

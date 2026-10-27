@@ -19,6 +19,9 @@ export function worker(tab: { id: number; url: string; incognito?: boolean }) {
   let command: Function;
   const opened: any[] = [],
     created: any[] = [];
+  let updated: Function, removed: Function;
+  const browserTabs = new Map<number, any>([[tab.id, tab]]),
+    activated: any[] = [];
   const event = () => ({ addListener() {} });
   const storage = (data: Record<string, any>) => ({
     async get() {
@@ -42,13 +45,36 @@ export function worker(tab: { id: number; url: string; incognito?: boolean }) {
     },
     storage: { local: storage(local), session: storage(session) },
     tabs: {
-      query: async () => [tab],
+      query: async (query: any) =>
+        query?.active ? [tab] : [...browserTabs.values()],
+      get: async (id: number) => {
+        if (!browserTabs.has(id)) throw Error("No tab");
+        return browserTabs.get(id);
+      },
+      update: async (id: number, options: any) => {
+        if (!browserTabs.has(id)) throw Error("No tab");
+        Object.assign(browserTabs.get(id), options);
+        activated.push({ id, ...options });
+        return browserTabs.get(id);
+      },
       create: async (options: any) => {
         created.push(options);
+        const next = { id: 100 + created.length, ...options };
+        browserTabs.set(next.id, next);
+        return next;
       },
       sendMessage: async () => ({}),
       onCreated: event(),
-      onRemoved: event(),
+      onUpdated: {
+        addListener(fn: Function) {
+          updated = fn;
+        },
+      },
+      onRemoved: {
+        addListener(fn: Function) {
+          removed = fn;
+        },
+      },
     },
     alarms: { onAlarm: event() },
     commands: {
@@ -138,6 +164,18 @@ export function worker(tab: { id: number; url: string; incognito?: boolean }) {
     injected,
     opened,
     created,
+    activated,
+    async navigate(id: number, url: string) {
+      const t = browserTabs.get(id);
+      t.url = url;
+      await updated(id, { url }, t);
+      await new Promise((r) => setImmediate(r));
+    },
+    async closeTab(id: number) {
+      browserTabs.delete(id);
+      await removed(id);
+      await new Promise((r) => setImmediate(r));
+    },
     async command(name: string) {
       await command(name, { ...tab, windowId: 1 });
       await new Promise((r) => setImmediate(r));

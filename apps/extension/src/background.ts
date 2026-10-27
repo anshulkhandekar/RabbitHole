@@ -14,6 +14,7 @@ import {
   handoffPending,
   HANDOFF_BATCH_SIZE,
 } from "./handoff-model";
+import { goConversation } from "./go-chat-model";
 import type { Handoff } from "./handoff";
 import { googleQuery } from "./google";
 import { isExcluded, looksUnrelated, siteKey } from "./exclusion";
@@ -36,6 +37,8 @@ type Local = {
   newSessionDefaults?: Session["settings"];
   practicePreferences?: PracticePreferences;
   goCompletion?: GoCompletion;
+  goChats?: Record<string, { url: string; agentUrl: string }>;
+  goTabs?: Record<string, number>;
   mapSeen?: Record<string, number>;
   mapUpdated?: Record<string, number>;
   // Tab-scoped like bindings: cleared on browser restart.
@@ -70,9 +73,11 @@ const load = async (): Promise<Local> => {
         searchSession?: string;
         offers?: Record<string, Offer>;
         hush?: Record<string, number>;
+        goTabs?: Record<string, number>;
       }
     | undefined;
   state.tabs = bindings?.tabs ?? {};
+  state.goTabs = bindings?.goTabs ?? {};
   state.offers = bindings?.offers ?? {};
   state.hush = bindings?.hush ?? {};
   state.lastCapture = bindings?.lastCapture ?? {};
@@ -109,11 +114,19 @@ const load = async (): Promise<Local> => {
 };
 const persist = async (s: Local) => {
   await chrome.storage.local.set({
-    state: { ...s, tabs: {}, lastCapture: {}, offers: {}, hush: {} },
+    state: {
+      ...s,
+      tabs: {},
+      lastCapture: {},
+      offers: {},
+      hush: {},
+      goTabs: {},
+    },
   });
   await chrome.storage.session.set({
     bindings: {
       tabs: s.tabs,
+      goTabs: s.goTabs,
       lastCapture: s.lastCapture,
       searchSession: s.searchSession,
       offers: s.offers,
@@ -379,10 +392,26 @@ chrome.tabs.onCreated.addListener((tab) => {
       s.tabs[tab.id] = s.active!;
   });
 });
+chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
+  if (!change.url) return;
+  return transact(async (s) => {
+    const id = Object.keys(s.goTabs ?? {}).find(
+      (id) => s.goTabs![id] === tabId,
+    );
+    if (!id) return;
+    const url = goConversation(change.url!, s.config.agentUrl);
+    if (url && !s.goChats?.[id]) {
+      s.goChats ??= {};
+      s.goChats[id] = { url, agentUrl: s.config.agentUrl };
+    }
+  });
+});
 chrome.tabs.onRemoved.addListener(
   (id) =>
     void transact(async (s) => {
       delete s.tabs[id];
+      for (const sessionId of Object.keys(s.goTabs ?? {}))
+        if (s.goTabs![sessionId] === id) delete s.goTabs![sessionId];
       delete s.lastCapture[id];
     }),
 );
@@ -656,6 +685,62 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       return s;
     }
     if (msg.type === "state") return s;
+    if (msg.type === "go-chat") {
+      if (!s.sessions[msg.id]) throw Error("Unknown session");
+      s.goChats ??= {};
+      if (!msg.url) delete s.goChats[msg.id];
+      else {
+        const url = goConversation(String(msg.url), s.config.agentUrl);
+        if (!url)
+          throw Error(
+            "Use a Go conversation URL from your configured Go host (/tasks/<chat-id>).",
+          );
+        s.goChats[msg.id] = { url, agentUrl: s.config.agentUrl };
+      }
+      if (s.goTabs) delete s.goTabs[msg.id];
+      await persist(s);
+      return s;
+    }
+    if (msg.type === "go-open") {
+      if (!s.sessions[msg.id]) throw Error("Unknown session");
+      s.goTabs ??= {};
+      s.goChats ??= {};
+      const saved = s.goChats[msg.id];
+      if (saved && saved.agentUrl !== s.config.agentUrl) {
+        delete s.goChats[msg.id];
+        delete s.goTabs[msg.id];
+      }
+      const target =
+        saved?.agentUrl === s.config.agentUrl ? saved.url : s.config.agentUrl;
+      let tab: chrome.tabs.Tab | undefined;
+      const tracked = s.goTabs[msg.id];
+      if (tracked !== undefined)
+        tab = await chrome.tabs.get(tracked).catch(() => undefined);
+      if (
+        tab?.url &&
+        new URL(tab.url).origin !== new URL(s.config.agentUrl).origin
+      )
+        tab = undefined;
+      if (!tab && target !== s.config.agentUrl)
+        tab = (await chrome.tabs.query({})).find(
+          (t) => t.url && goConversation(t.url, s.config.agentUrl) === target,
+        );
+      if (tab?.id !== undefined) {
+        const current = tab.url && goConversation(tab.url, s.config.agentUrl);
+        if (current && !s.goChats[msg.id])
+          s.goChats[msg.id] = { url: current, agentUrl: s.config.agentUrl };
+        await chrome.tabs.update(tab.id, {
+          active: true,
+          ...(target !== s.config.agentUrl && current !== target
+            ? { url: target }
+            : {}),
+        });
+      } else tab = await chrome.tabs.create({ url: target });
+      if (tab.id !== undefined) s.goTabs[msg.id] = tab.id;
+      await persist(s);
+      return s;
+    }
+
     if (msg.type === "map-seen" && s.sessions[msg.id]) {
       s.mapSeen ??= {};
       s.mapSeen[msg.id] = s.sessions[msg.id].version;
@@ -851,6 +936,8 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       for (const id of Object.keys(s.tabs))
         if (s.tabs[id] === msg.id) delete s.tabs[id];
       delete s.excluded[msg.id];
+      if (s.goChats) delete s.goChats[msg.id];
+      if (s.goTabs) delete s.goTabs[msg.id];
       delete s.dismissed[msg.id];
       enqueue(s, "DELETE", `/api/sessions/${msg.id}`);
       await persist(s);

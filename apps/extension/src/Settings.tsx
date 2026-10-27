@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import type { Session, Prefs } from "../../../packages/contracts/src/index";
 import { Button, IconButton, Segmented } from "./components";
 import { Icon } from "./Icon";
+import { goConversation } from "./go-chat-model";
 import { exclusionLabel } from "./exclusion";
 import {
   practicePreferences,
@@ -48,6 +49,8 @@ export function Settings(p: {
   onDelete: () => void;
   onUnexclude: (url: string) => void;
   onSearchOffer: (v: boolean) => void;
+  goChat?: string;
+  onGoChat?: (url: string) => Promise<unknown>;
 }) {
   const [section, setSection] = useState(
       p.initialSection ??
@@ -61,6 +64,8 @@ export function Settings(p: {
     [saving, setSaving] = useState(false),
     [error, setError] = useState(""),
     [manage, setManage] = useState(false),
+    [chat, setChat] = useState(p.goChat ?? ""),
+    [chatError, setChatError] = useState(""),
     [rename, setRename] = useState(p.session?.title ?? ""),
     [systemDark, setSystemDark] = useState(
       () => matchMedia("(prefers-color-scheme: dark)").matches,
@@ -563,6 +568,39 @@ export function Settings(p: {
               </fieldset>
               {p.session && (
                 <>
+                  <label>
+                    Go conversation for this rabbit hole
+                    <input
+                      type="url"
+                      value={chat}
+                      placeholder="https://go.superhuman.com/tasks/…"
+                      onChange={(e) => {
+                        setChat(e.target.value);
+                        setChatError("");
+                      }}
+                      onBlur={() => {
+                        const value = chat.trim();
+                        if (value && !goConversation(value, p.agentUrl)) {
+                          setChatError(
+                            "Use a conversation URL from your configured Go host (/tasks/<chat-id>).",
+                          );
+                          return;
+                        }
+                        if (value !== (p.goChat ?? ""))
+                          void p.onGoChat?.(value);
+                      }}
+                    />
+                  </label>
+                  <p className="muted">
+                    Requests reuse this conversation. RabbitHole remembers it
+                    automatically when a chat starts; paste an existing
+                    conversation here to link it.
+                  </p>
+                  {chatError && (
+                    <p className="error" role="alert">
+                      {chatError}
+                    </p>
+                  )}
                   <label>
                     Rename session
                     <input
