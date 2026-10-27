@@ -175,3 +175,31 @@ test("cached analysis revisions retain unchanged idea positions", async () => {
       original.x + original.width + 64 <= added.x,
   );
 });
+
+test("unconnected ideas form compact rows without fabricating edges or losing evidence depths", async () => {
+  const a = analysis();
+  a.edges = [];
+  a.concepts = Array.from({ length: 6 }, (_, i) => ({
+    ...a.concepts[0],
+    id: `idea${i}`,
+    captureIds: [`c${i}`],
+  }));
+  const caps = a.concepts.map((_, i) => ({
+    ...capture(`c${i}`),
+    tag: "none" as const,
+    references: [],
+    timestamp: `2026-10-27T10:0${i}:00.000Z`,
+  }));
+  const layout = await model.layoutIdeas(
+    a,
+    caps,
+    new Map(a.concepts.map((c) => [c.id, { width: 180, height: 60 }])),
+  );
+  assert.ok(new Set(layout.nodes.map((n) => n.x)).size > 1);
+  assert.ok(Math.max(...layout.nodes.map((n) => n.y)) < 600);
+  assert.deepEqual(
+    layout.nodes.map((n) => n.depth),
+    [1, 2, 3, 4, 5, 6],
+  );
+  assert.equal(a.edges.length, 0);
+});

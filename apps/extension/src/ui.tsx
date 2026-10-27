@@ -363,8 +363,8 @@ function App() {
     if (intent !== "feedback")
       await action("handoff", { id: session.id, ...receipt, intent });
     try {
-      await chrome.tabs.create({ url: state.config.agentUrl });
-      receipt.opened = true;
+      const opened = await action("go-open", { id: session.id });
+      receipt.opened = !!opened;
     } catch {
       setError(
         "Couldn’t open Go. Open your configured agent and use the prompt below.",
@@ -793,9 +793,7 @@ function App() {
         )}
         <Button
           quiet
-          onClick={() =>
-            void chrome.tabs.create({ url: state.config.agentUrl })
-          }
+          onClick={() => void action("go-open", { id: session!.id })}
         >
           {handoff.status === "stalled" ? "Check Go" : "Open Go tab"}
         </Button>
@@ -1359,6 +1357,8 @@ function App() {
             }
             return false;
           }}
+          goChat={state.goChats?.[session?.id ?? ""]?.url}
+          onGoChat={(url) => action("go-chat", { id: session!.id, url })}
           onSearchOffer={(value) => void action("ask-on-search", { value })}
           onUnexclude={(url) => void action("unexclude", { url })}
           onExport={exported}

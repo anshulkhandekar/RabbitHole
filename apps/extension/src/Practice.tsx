@@ -571,7 +571,7 @@ export function Practice({
         hub.coverage.missingLanes.some((m) => m.lane === "review"),
       askMissing = () =>
         (onGenerate ?? onFeedback)(
-          `For RabbitHole session ${session.id}, retrieve the saved session and evidence, then fill the incomplete question bank. Missing topics: ${hub.coverage.emptyTopics.map((t) => t.name).join(", ") || "none"}. Missing lanes: ${hub.coverage.missingLanes.map((m) => `${m.topicName}: ${m.lane === "review" ? "review variants" : m.lane}`).join("; ")}. Preserve existing IDs, questions and attempts. Validate the full analysis and save it with rebuild intent and no newly processed captures.`,
+          `For RabbitHole session ${session.id}, retrieve the saved session and evidence, then fill the incomplete question bank. Use the read-only ValidateSessionQuestions tool with sessionId, the current expectedVersion, and only new questions using the saved conceptIds. Do not send or retype captureIds, evidence, concepts or edges: the server attaches saved source IDs and preserves the map. After validation, call SaveValidatedAnalysis with the returned saveArguments for normal approval. Missing topics: ${hub.coverage.emptyTopics.map((t) => `${t.name} (concept ${t.id})`).join(", ") || "none"}. Missing lanes: ${hub.coverage.missingLanes.map((m) => `${m.topicName}: ${m.lane === "review" ? "review variants" : m.lane}`).join("; ")}. Preserve existing IDs, questions and attempts. Do not rewrite the full analysis. If ValidateSessionQuestions is missing, report that the connector needs updating. If the saved explanations contain only interests and gaps, explain what source content is needed instead of inventing factual quiz answers.`,
         );
     return (
       <section className="practice-hub" ref={host}>
@@ -633,7 +633,7 @@ export function Practice({
                 </h3>
                 <p>
                   {hub.coverage.emptyTopics.length
-                    ? `${hub.coverage.emptyTopics.map((t) => t.name).join(", ")} has none yet. `
+                    ? `${hub.coverage.emptyTopics.map((t) => `${t.name} (concept ${t.id})`).join(", ")} has none yet. `
                     : ""}
                   Harder questions exist for{" "}
                   {hub.topics.length - missingHarder.length} topics.
@@ -773,7 +773,7 @@ export function Practice({
                 <Button
                   onClick={() =>
                     (onGenerate ?? onFeedback)(
-                      `Retrieve RabbitHole session ${session.id} and its evidence. Add more ${laneNames[lane]} for topic ${topic.name}; preserve existing IDs and validate before saving a rebuild.`,
+                      `Retrieve RabbitHole session ${session.id} and its evidence. Use ValidateSessionQuestions with only new questions and saved conceptIds (no captureIds or full-map rewrite), then SaveValidatedAnalysis with returned saveArguments for normal approval. Add more ${laneNames[lane]} for topic ${topic.name}; preserve existing IDs and validate before saving a rebuild.`,
                     )
                   }
                 >

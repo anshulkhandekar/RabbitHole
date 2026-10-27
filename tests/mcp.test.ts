@@ -39,6 +39,7 @@ test("authenticated API and official MCP client complete read → validated writ
         "SaveSessionAnalysis",
         "ValidateSessionAnalysis",
         "SaveValidatedAnalysis",
+        "ValidateSessionQuestions",
       ],
     );
     assert.equal(tools.tools[2].annotations?.readOnlyHint, false);
@@ -164,6 +165,34 @@ test("authenticated API and official MCP client complete read → validated writ
     assert.deepEqual(actual.analysis.overview, rich.overview);
     assert.equal(actual.analysis.concepts[1].parentId, "n1");
     assert.equal(actual.pending, 0);
+    const questions = await client.callTool({
+      name: "ValidateSessionQuestions",
+      arguments: {
+        sessionId: "s1",
+        expectedVersion: 2,
+        questions: [
+          {
+            id: "added_question",
+            type: "connection",
+            prompt: "Why does independence matter?",
+            answer: "Independent operations can proceed together.",
+            conceptIds: ["n1"],
+          },
+        ],
+      },
+    });
+    assert.equal(questions.isError, undefined);
+    const questionReceipt = JSON.parse((questions.content as any)[0].text);
+    assert.equal(db.get("alice", "s1").version, 2);
+    const questionSave = await client.callTool({
+      name: "SaveValidatedAnalysis",
+      arguments: questionReceipt.saveArguments,
+    });
+    assert.equal(questionSave.isError, undefined);
+    assert.equal(
+      db.get("alice", "s1").analysis!.studyItems.at(-1)!.captureIds[0],
+      "c1",
+    );
     for (let i = 2; i <= 9; i++)
       db.capture(
         "alice",

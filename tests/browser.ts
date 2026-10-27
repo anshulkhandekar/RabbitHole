@@ -544,6 +544,25 @@ try {
   await expect(ui.locator(".world-label")).not.toHaveCount(0);
   await ui.keyboard.press("Escape");
   await expect(ui.locator(".idea-drawer")).toHaveCount(0);
+  await ui.emulateMedia({
+    colorScheme: "light",
+    reducedMotion: "no-preference",
+  });
+  await ui.locator('.react-flow__node[data-id="n1"]').click();
+  await ui.getByRole("button", { name: "Close details", exact: true }).click();
+  assert.equal(
+    await ui
+      .locator('.react-flow__node[data-id="n1"] .idea-card')
+      .evaluate((el) => getComputedStyle(el).animationName),
+    "none",
+  );
+  assert.equal(
+    await ui
+      .locator('.react-flow__node[data-id="n1"] .idea-card')
+      .evaluate((el) => getComputedStyle(el).opacity),
+    "1",
+  );
+  await ui.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await ui.setViewportSize({ width: 880, height: 800 });
   await ui.locator('.react-flow__node[data-id="n1"]').click();
   const canvasBox = await ui.locator(".map-canvas").boundingBox(),
