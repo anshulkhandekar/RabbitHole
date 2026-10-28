@@ -193,7 +193,7 @@ test("authenticated API and official MCP client complete read → validated writ
       db.get("alice", "s1").analysis!.studyItems.at(-1)!.captureIds[0],
       "c1",
     );
-    for (let i = 2; i <= 9; i++)
+    for (let i = 2; i <= 15; i++)
       db.capture(
         "alice",
         "s1",
@@ -204,9 +204,9 @@ test("authenticated API and official MCP client complete read → validated writ
       arguments: { sessionId: "s1" },
     });
     const firstData = JSON.parse((firstBatch.content as any)[0].text);
-    assert.equal(firstData.captures.length, 6);
-    assert.equal(firstData.nextOffset, 6);
-    assert.equal(firstData.processingDefaults.processedCaptureIds.length, 6);
+    assert.equal(firstData.captures.length, 12);
+    assert.equal(firstData.nextOffset, 12);
+    assert.equal(firstData.processingDefaults.processedCaptureIds.length, 12);
     const lastBatch = await client.callTool({
       name: "GetSession",
       arguments: { sessionId: "s1", offset: firstData.nextOffset },

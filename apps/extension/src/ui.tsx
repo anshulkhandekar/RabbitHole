@@ -22,7 +22,7 @@ import { MapView, type Selection } from "./MapView";
 import { shortTitle } from "./summary-model";
 import { Summary } from "./Summary";
 import { ReadyNote } from "./ReadyNote";
-import { handoffPending, HANDOFF_BATCH_SIZE } from "./handoff-model";
+import { handoffPending } from "./handoff-model";
 import { Settings } from "./Settings";
 import { Practice, PracticeLoading } from "./Practice";
 import { domain, time } from "./ui-model";
@@ -79,6 +79,24 @@ function App() {
   const waiting = handoffPending(handoff);
   const [readyNote, setReadyNote] = useState(false);
   const notified = useRef("");
+  const panelWindow = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    void chrome.tabs.getCurrent().then((tab) => {
+      panelWindow.current = tab?.windowId;
+    });
+  }, []);
+  function openPanel() {
+    // Call Chrome directly inside the click. Messaging/storage awaits lose the gesture.
+    const windowId = panelWindow.current;
+    if (windowId === undefined) {
+      setError("The browser window is still loading. Try again.");
+      return;
+    }
+    void chrome.sidePanel
+      .open({ windowId })
+      .then(() => setError(""))
+      .catch((error) => setError(String(error.message ?? error)));
+  }
   const mapDot =
     (state?.mapSeen?.[state.active] ?? 0) <
     (state?.mapUpdated?.[state.active] ?? handoff?.savedVersion ?? 0);
@@ -352,7 +370,7 @@ function App() {
     }
     const prompt =
       custom ??
-      `Process RabbitHole session ${session.id}. Retrieve the current session and its first batch of up to ${HANDOFF_BATCH_SIZE} pending captures using RabbitHole tools. Process only this batch this run; leave remaining captures pending for the next Send to Go. Use each capture's short ref exactly in all captureIds, evidence[].captureId and processedCaptureIds; copy expectedVersion and inspected refs from processingDefaults. Keep canonical IDs already in the existing analysis. Never reconstruct UUIDs. Search queries express interests, not factual support: if this batch has only queries, merge an honest interest-and-gap map, mark the queries you actually considered processed, and do not fabricate source-backed facts or quizzes. Merge evidence-linked concepts and selected activities; include overview plus summary, takeaways [{text, concept}], route [conceptId], concept.main, studyItem.concept and matching pairs[].concept. Write each idea as claim, why, explanation (with buildsOn), steps when sequential, example and boundary; answer my goal if the session has one. Quiz wrong choices should each reflect a specific wrong belief, with hints and a variantOf sibling for key questions. Run read-only ValidateSessionAnalysis on the complete payload and correct errors BEFORE requesting normal SaveValidatedAnalysis approval using the returned saveArguments (sessionId, validationId, title). Do not retype the guide. If validation is unavailable, stop and report that the connector needs updating. Never repeat an unchanged failed save. Report success only after a saved version, and report remaining pending captures.`;
+      `Process RabbitHole session ${session.id}. Retrieve the current session and ALL pending captures using RabbitHole tools. Follow every nextOffset page before constructing one complete merged analysis in this run. There is no six-capture processing cap. Connect ideas across the entire inspected trail rather than treating each page as a separate topic. Use each capture's short ref exactly in all captureIds, evidence[].captureId and processedCaptureIds; copy expectedVersion and accumulate all inspected pending refs from processingDefaults across every page. Keep canonical IDs already in the existing analysis. Never reconstruct UUIDs. Search queries express interests, not factual support: if this batch has only queries, merge an honest interest-and-gap map, mark the queries you actually considered processed, and do not fabricate source-backed facts or quizzes. Merge evidence-linked concepts and selected activities; include overview plus summary, takeaways [{text, concept}], route [conceptId], concept.main, studyItem.concept and matching pairs[].concept. Write each idea as claim, why, explanation (with buildsOn), steps when sequential, example and boundary; answer my goal if the session has one. For every main idea with substantive evidence, generate basic questions plus apply/transfer practice and meaningful relationships to other ideas where supported. Distinguish inferred connections. Respect the 40-activity total limit. Quiz wrong choices should each reflect a specific wrong belief, with hints and a variantOf sibling for key questions. Run read-only ValidateSessionAnalysis on the complete payload and correct errors BEFORE requesting normal SaveValidatedAnalysis approval using the returned saveArguments (sessionId, validationId, title). Do not retype the guide. If validation is unavailable, stop and report that the connector needs updating. Never repeat an unchanged failed save. Report success only after a saved version, and report remaining pending captures.`;
     const receipt = {
       sessionId: session.id,
       prompt,
@@ -1082,7 +1100,7 @@ function App() {
               <IconButton
                 name="panel"
                 label="Back to side panel"
-                onClick={() => void action("open-panel")}
+                onClick={openPanel}
               />
             )}
             <IconButton

@@ -95,8 +95,12 @@ test("matching has unambiguous pairs and rejects incomplete or forged review gra
   );
   db.db.close();
 });
-test("automatic highlights require opt-in and matching can be selected as an activity", () => {
-  assert.equal((Preferences.parse({}) as any).autoHighlights, false);
+test("new sessions collect trusted highlights by default and preserve an explicit opt-out", () => {
+  assert.equal(Preferences.parse({}).autoHighlights, true);
+  assert.equal(
+    Preferences.parse({ autoHighlights: false }).autoHighlights,
+    false,
+  );
   assert.equal(
     Preferences.safeParse({
       autoHighlights: true,

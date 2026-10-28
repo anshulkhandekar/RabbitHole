@@ -1,6 +1,5 @@
 import type { Session } from "../../../packages/contracts/src/index";
 import type { Handoff } from "./handoff";
-export const HANDOFF_BATCH_SIZE = 6;
 export const handoffPending = (h?: Handoff) =>
   h?.status === "waiting" || h?.status === "stalled";
 export function advanceHandoff(

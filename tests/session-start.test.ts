@@ -227,7 +227,7 @@ test("an unread map update keeps its dot while the next handoff is pending", asy
   assert.equal(next.handoffs[id].status, "waiting");
 });
 
-test("a six-find handoff finishes after its batch saves while later finds remain pending", async () => {
+test("a handoff includes all pending finds and leaves only later arrivals pending", async () => {
   const app = worker({ id: 7, url: base + "index.html?workspace=1" });
   const started = await app.request("start"),
     id = started.active;
@@ -236,7 +236,7 @@ test("a six-find handoff finishes after its batch saves while later finds remain
   }));
   const sent = await app.request("handoff", {
     id,
-    prompt: "Process first batch",
+    prompt: "Process all pending finds",
   });
   assert.deepEqual(sent.handoffs[id].captureIds, [
     "c1",
@@ -245,13 +245,16 @@ test("a six-find handoff finishes after its batch saves while later finds remain
     "c4",
     "c5",
     "c6",
+    "c7",
+    "c8",
   ]);
   app.local.state.config.token = "test-token";
   app.local.state.queue = [];
   app.setRemote({
     ...sent.sessions[id],
     version: 1,
-    processed: ["c1", "c2", "c3", "c4", "c5", "c6"],
+    processed: ["c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8"],
+    captures: [...sent.sessions[id].captures, { id: "c9" }],
     analysis: analysis(),
   });
   const refreshed = await app.request("refresh");
@@ -260,6 +263,75 @@ test("a six-find handoff finishes after its batch saves while later finds remain
     refreshed.sessions[id].captures.filter(
       (c: any) => !refreshed.sessions[id].processed.includes(c.id),
     ).length,
+    1,
+  );
+});
+
+test("opening the side panel calls Chrome immediately before asynchronous storage work", async () => {
+  const app = worker({
+    id: 7,
+    url: base + "index.html?workspace=1",
+    windowId: 17,
+  });
+  const opened = app.request("open-panel");
+  assert.equal(app.opened[0]?.windowId, 17);
+  assert.equal((await opened).opened, true);
+});
+
+test("a new article inherits its search session before the first content scan", async () => {
+  const app = worker({ id: 1, url: "https://research.example/start" });
+  await app.request("start");
+  await app.newTab({
+    id: 3,
+    url: "https://www.google.com/search?q=alloys",
+    active: false,
+  });
+  await app.newTab({
+    id: 2,
+    url: "https://research.example/alloys",
+    openerTabId: 3,
+    active: true,
+  });
+  const context = await app.fromTab(
+    { type: "reading-context" },
+    "https://research.example/alloys",
     2,
   );
+  assert.equal(context.included, true);
+});
+
+test("new article tabs never inherit collection when private or excluded", async () => {
+  const app = worker({ id: 1, url: "https://research.example/start" });
+  const state = await app.request("start");
+  app.local.state.excluded[state.active] = ["site:blocked.example"];
+  await app.newTab({
+    id: 2,
+    url: "https://blocked.example/article",
+    openerTabId: 1,
+  });
+  await app.newTab({
+    id: 3,
+    url: "https://research.example/private",
+    openerTabId: 1,
+    incognito: true,
+  });
+  assert.equal(app.session.bindings.tabs[2], undefined);
+  assert.equal(app.session.bindings.tabs[3], undefined);
+});
+
+test("following an article enrolls a new search before same-tab navigation", async () => {
+  const app = worker({ id: 1, url: base + "index.html?workspace=1" });
+  await app.request("start");
+  const follow = await app.fromTab(
+    { type: "research-follow", url: "https://research.example/article" },
+    "https://www.google.com/search?q=alloys",
+    8,
+  );
+  assert.equal(follow.included, true);
+  const context = await app.fromTab(
+    { type: "reading-context" },
+    "https://research.example/article",
+    8,
+  );
+  assert.equal(context.included, true);
 });

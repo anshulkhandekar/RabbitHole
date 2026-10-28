@@ -1,4 +1,4 @@
-import { Readability } from "@mozilla/readability";
+import { pageText, articleChanged } from "./capture-model";
 import { googleQuery, overview } from "./google";
 import { readSelection } from "./selection";
 import readingCSS from "./styles/reading.css";
@@ -55,6 +55,8 @@ declare const __RABBIT_TOKENS__: string;
   let context: any = null,
     lastUrl = "",
     lastArticle = "",
+    lastArticleText = "",
+    scannedSession = "",
     timer: ReturnType<typeof setTimeout> | undefined;
   const send = async (
     type: string,
@@ -96,75 +98,107 @@ declare const __RABBIT_TOKENS__: string;
           ? "Highlight saved"
           : type === "search"
             ? "Search saved"
-            : "Page saved",
+            : type === "google_ai_overview"
+              ? "AI Overview saved"
+              : "Page saved",
       );
     }
     return result;
   };
-  function safeClone() {
-    const clone = document.cloneNode(true) as Document;
-    clone
-      .querySelectorAll(
-        'input,textarea,select,[contenteditable],script,style,nav,footer,header,aside,form,[hidden],[role="navigation"],[aria-hidden="true"],[data-rabbithole-reading]',
-      )
-      .forEach((el) => el.remove());
-    return clone;
-  }
+  let scanning = false;
   async function scan() {
-    if (stopped) return;
-    context = await message({ type: "reading-context" });
-    if (stopped) return;
-    updateIndicator();
-    if (document.visibilityState !== "visible") return;
-    if (lastUrl !== location.href) {
-      lastUrl = location.href;
-      lastArticle = "";
-    }
-    const q = googleQuery(location.href);
-    if (q && lastOffer !== location.href) {
-      lastOffer = location.href;
-      const offer = await message({ type: "search-offer" });
+    if (stopped || scanning) return;
+    scanning = true;
+    try {
+      context = await message({ type: "reading-context" });
       if (stopped) return;
-      if (offer?.kind) showOffer(offer);
-      else hideOffer();
-    }
-    if (
-      !context ||
-      context.included === false ||
-      context.status !== "active" ||
-      document.visibilityState !== "visible"
-    )
-      return;
-    if (q) {
-      await send("search", q);
-      const ai = overview(document);
-      if (ai) await send("google_ai_overview", ai.text, ai.references);
-    } else if (
-      context.settings.articleCapture &&
-      lastArticle !== location.href
-    ) {
-      const article = new Readability(safeClone(), {
-        charThreshold: 250,
-      }).parse();
-      if (article?.textContent && article.textContent.trim().length >= 250) {
-        lastArticle = location.href;
-        await send("article", article.textContent);
+      updateIndicator();
+      if (document.visibilityState !== "visible") return;
+      if (lastUrl !== location.href || scannedSession !== context?.id) {
+        lastUrl = location.href;
+        scannedSession = context?.id ?? "";
+        lastArticle = "";
+        lastArticleText = "";
       }
+      const q = googleQuery(location.href);
+      if (q && lastOffer !== location.href) {
+        lastOffer = location.href;
+        const offer = await message({ type: "search-offer" });
+        if (stopped) return;
+        if (offer?.kind) showOffer(offer);
+        else hideOffer();
+      }
+      if (
+        !context ||
+        context.included === false ||
+        context.status !== "active" ||
+        document.visibilityState !== "visible"
+      )
+        return;
+      if (q) {
+        await send("search", q);
+        const ai = overview(document);
+        if (ai) await send("google_ai_overview", ai.text, ai.references);
+      } else if (context.settings.articleCapture) {
+        const text = pageText(document);
+        if (
+          text &&
+          (lastArticle !== location.href ||
+            articleChanged(lastArticleText, text))
+        ) {
+          const result = await send("article", text);
+          if (result?.saved || result?.duplicate) {
+            lastArticle = location.href;
+            lastArticleText = text;
+          }
+        }
+      }
+    } finally {
+      scanning = false;
     }
   }
+
   const schedule = () => {
     if (stopped) return;
-    clearTimeout(timer);
-    timer = setTimeout(() => void scan(), 1100);
+    if (timer !== undefined) return;
+    timer = setTimeout(() => {
+      timer = undefined;
+      void scan();
+    }, 1100);
   };
-  // The observer only schedules extraction on Google; it never serializes a DOM.
-  const observer = new MutationObserver(() => {
-    if (googleQuery(location.href)) schedule();
+  const observer = new MutationObserver((records) => {
+    if (
+      records.some(
+        (record) =>
+          !(
+            record.target instanceof Element &&
+            record.target.closest("[data-rabbithole-reading]")
+          ),
+      )
+    )
+      schedule();
   });
   observer.observe(document.documentElement, {
     subtree: true,
     childList: true,
+    characterData: true,
   });
+  document.addEventListener(
+    "click",
+    (event) => {
+      if (!event.isTrusted || event.defaultPrevented) return;
+      const link = (event.target as Element)?.closest?.<HTMLAnchorElement>(
+        "a[href]",
+      );
+      if (
+        link &&
+        /^https?:/.test(link.href) &&
+        !link.closest("[data-rabbithole-reading]")
+      )
+        void message({ type: "research-follow", url: link.href });
+    },
+    { capture: true, signal: events.signal },
+  );
   document.addEventListener("visibilitychange", schedule, {
     signal: events.signal,
   });

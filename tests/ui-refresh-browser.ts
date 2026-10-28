@@ -250,6 +250,22 @@ try {
       await page.getByRole("button", { name: section, exact: true }).click();
       await shot(`settings-workspace-${section.toLowerCase()}`, scheme);
     }
+    const shared = page.getByRole("switch", {
+      name: "Use these preferences for all rabbit holes",
+      exact: true,
+    });
+    await shared.click();
+    await expect(shared).toBeChecked();
+    await expect
+      .poll(() =>
+        worker.evaluate(
+          async () =>
+            ((await chrome.storage.local.get("state")).state as any)
+              .shareSessionPreferences,
+        ),
+      )
+      .toBe(true);
+    await shot("shared-preferences", scheme);
     await page.getByRole("button", { name: "Connection", exact: true }).click();
     await page.getByRole("button", { name: "Change connection…" }).click();
     await expect(page.locator('input[type="password"]')).toHaveCount(0);
@@ -260,6 +276,21 @@ try {
     await expect(
       page.getByRole("button", { name: "Settings", exact: true }),
     ).toBeFocused();
+    await seed(
+      {
+        sessions: {
+          s1: {
+            ...session,
+            captures: [{ ...capture("c1"), tag: "none", references: [] }],
+            processed: ["c1"],
+          },
+        },
+      },
+      "map",
+    );
+    await page.locator('.react-flow__node[data-id="n1"]').click();
+    await expect(page.locator(".drawer-links")).toContainText("1 source page");
+    await shot("connection-strength", scheme);
     await seed({}, "map", true);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     for (const section of [

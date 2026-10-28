@@ -31,6 +31,7 @@ export function Settings(p: {
   mapList: boolean;
   state: {
     newSessionDefaults?: Prefs;
+    shareSessionPreferences?: boolean;
     practicePreferences?: PracticePreferences;
     goCompletion?: GoCompletion;
     askOnSearch?: boolean;
@@ -112,7 +113,7 @@ export function Settings(p: {
     return () => window.removeEventListener("keydown", key);
   }, []);
   const saveSettings = (value: Partial<Prefs>) =>
-    p.session
+    p.session && !p.state.shareSessionPreferences
       ? p.onSession({ settings: { ...settings, ...value } })
       : p.onPreference({ newSessionDefaults: { ...settings, ...value } });
   const switchControl = (
@@ -174,8 +175,10 @@ export function Settings(p: {
           <div>
             <h1>Settings</h1>
             <p>
-              Changes save as you make them. Session holds settings for this
-              rabbit hole only.
+              Changes save as you make them.{" "}
+              {p.state.shareSessionPreferences
+                ? "Session preferences are shared across all rabbit holes."
+                : "Session holds settings for this rabbit hole only."}
             </p>
           </div>
           <IconButton name="x" label="Close settings" onClick={p.onClose} />
@@ -499,6 +502,19 @@ export function Settings(p: {
             </section>
             <section data-section="Session">
               <h2>Session</h2>
+              {switchControl(
+                "Use these preferences for all rabbit holes",
+                p.state.shareSessionPreferences ?? false,
+                (shared) =>
+                  void p.onPreference({
+                    shareSessionPreferences: shared,
+                    ...(shared ? { newSessionDefaults: settings } : {}),
+                  }),
+              )}
+              <p className="muted">
+                When enabled, depth, analogies, activities and capture
+                preferences apply to existing and future rabbit holes.
+              </p>
               {!p.session && (
                 <aside className="defaults-banner">
                   Defaults for new rabbit holes. Nothing is open yet. These
