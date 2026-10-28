@@ -9,11 +9,7 @@ import {
   type PracticePreferences,
   type GoCompletion,
 } from "./settings-model";
-import {
-  advanceHandoff,
-  handoffPending,
-  HANDOFF_BATCH_SIZE,
-} from "./handoff-model";
+import { advanceHandoff, handoffPending } from "./handoff-model";
 import { goConversation } from "./go-chat-model";
 import type { Handoff } from "./handoff";
 import { googleQuery } from "./google";
@@ -35,6 +31,7 @@ type Local = {
   widgetPosition?: { x: number; y: number };
   askOnSearch?: boolean;
   newSessionDefaults?: Session["settings"];
+  shareSessionPreferences?: boolean;
   practicePreferences?: PracticePreferences;
   goCompletion?: GoCompletion;
   goChats?: Record<string, { url: string; agentUrl: string }>;
@@ -382,19 +379,36 @@ chrome.alarms.onAlarm.addListener(
         );
     }),
 );
-chrome.tabs.onCreated.addListener((tab) => {
-  void transact(async (s) => {
-    if (
-      tab.id !== undefined &&
-      tab.openerTabId !== undefined &&
-      s.tabs[tab.openerTabId] === s.active
-    )
-      s.tabs[tab.id] = s.active!;
-  });
-});
+async function inheritResearchTab(s: Local, tab: chrome.tabs.Tab) {
+  const session = s.active ? s.sessions[s.active] : undefined;
+  const url = tab.url || tab.pendingUrl || "";
+  if (
+    !session ||
+    session.status !== "active" ||
+    tab.id === undefined ||
+    tab.incognito ||
+    !/^https?:/.test(url) ||
+    isExcluded(s.excluded[session.id], url) ||
+    tab.openerTabId === undefined
+  )
+    return;
+  if (s.tabs[tab.openerTabId] !== session.id) {
+    try {
+      const opener = await chrome.tabs.get(tab.openerTabId);
+      enrollSearch(s, { ...opener, active: true });
+    } catch {
+      return;
+    }
+  }
+  if (s.tabs[tab.openerTabId] === session.id) s.tabs[tab.id] = session.id;
+}
+chrome.tabs.onCreated.addListener((tab) =>
+  transact((s) => inheritResearchTab(s, tab)),
+);
 chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
   if (!change.url) return;
   return transact(async (s) => {
+    await inheritResearchTab(s, tab);
     const id = Object.keys(s.goTabs ?? {}).find(
       (id) => s.goTabs![id] === tabId,
     );
@@ -475,6 +489,27 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
     const internal =
       sender.id === chrome.runtime.id &&
       sender.url?.startsWith(chrome.runtime.getURL(""));
+    if (msg.type === "research-follow") {
+      const session = s.active ? s.sessions[s.active] : undefined,
+        tab = sender.tab;
+      if (
+        sender.id !== chrome.runtime.id ||
+        sender.frameId !== 0 ||
+        !tab ||
+        tab.incognito ||
+        sender.url !== tab.url ||
+        !session ||
+        session.status !== "active" ||
+        !/^https?:/.test(String(msg.url)) ||
+        isExcluded(s.excluded[session.id], msg.url) ||
+        isExcluded(s.excluded[session.id], tab.url ?? "")
+      )
+        return { ignored: true };
+      enrollSearch(s, tab);
+      return {
+        included: tab.id !== undefined && s.tabs[tab.id] === session.id,
+      };
+    }
     if (msg.type === "reading-context") {
       const id = sender.tab?.id,
         session = s.active ? s.sessions[s.active] : undefined;
@@ -748,8 +783,18 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       return s;
     }
     if (msg.type === "preferences") {
-      if (msg.newSessionDefaults)
+      if (typeof msg.shareSessionPreferences === "boolean")
+        s.shareSessionPreferences = msg.shareSessionPreferences;
+      if (msg.newSessionDefaults) {
         s.newSessionDefaults = sessionDefaults(msg.newSessionDefaults);
+        if (s.shareSessionPreferences)
+          for (const session of Object.values(s.sessions)) {
+            session.settings = structuredClone(s.newSessionDefaults);
+            enqueue(s, "PATCH", `/api/sessions/${session.id}`, {
+              settings: session.settings,
+            });
+          }
+      }
       if (msg.practicePreferences)
         s.practicePreferences = practicePreferences(msg.practicePreferences);
       if (["notify", "open", "quiet"].includes(msg.goCompletion))
@@ -796,7 +841,6 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
                       !session.processed.includes(c.id) &&
                       !session.hidden?.includes(c.id),
                   )
-                  .slice(0, HANDOFF_BATCH_SIZE)
                   .map((c) => c.id)),
           startedAt: previous?.startedAt ?? new Date().toISOString(),
           status: previous?.status ?? "waiting",
@@ -1017,6 +1061,17 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
               ),
             );
           }
+          if (
+            s.shareSessionPreferences &&
+            s.newSessionDefaults &&
+            JSON.stringify(remote.settings) !==
+              JSON.stringify(s.newSessionDefaults)
+          ) {
+            remote.settings = structuredClone(s.newSessionDefaults);
+            enqueue(s, "PATCH", `/api/sessions/${remote.id}`, {
+              settings: remote.settings,
+            });
+          }
           s.sessions[remote.id] = remote;
           const handoff = s.handoffs?.[remote.id];
           if (handoff) {
@@ -1038,7 +1093,9 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
 }
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (
-    msg.type === "reading-open" &&
+    (msg.type === "reading-open" ||
+      (msg.type === "open-panel" &&
+        sender.url?.startsWith(chrome.runtime.getURL("")))) &&
     sender.id === chrome.runtime.id &&
     sender.tab?.windowId !== undefined
   ) {

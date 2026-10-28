@@ -1,3 +1,4 @@
+import { connectionStrength } from "./connection-model";
 import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 import type { Session } from "../../../packages/contracts/src/index";
 import type { Selection } from "./MapView";
@@ -113,6 +114,14 @@ export function IdeaDrawer({
             ))}
           </ol>
         )}
+        {e && (
+          <p
+            className="memory-line"
+            title="Distinct captured article or highlight URLs cited by this connection. Repeated highlights count once. Search queries and AI Overviews do not count as independent page support."
+          >
+            Evidence strength: {connectionStrength(session, e).label}
+          </p>
+        )}
         {item.example && (
           <div className="idea-example">
             <b>Example</b>
@@ -202,6 +211,7 @@ export function IdeaDrawer({
                         <b>{label(e.source)}</b> / {e.label}
                       </>
                     )}
+                    <small>{connectionStrength(session, e).label}</small>
                     {e.evidenceKind !== "supported" && (
                       <small>Go inferred</small>
                     )}

@@ -8,7 +8,12 @@ const bundle = await build({
   write: false,
 });
 export const base = "chrome-extension://test-extension/";
-export function worker(tab: { id: number; url: string; incognito?: boolean }) {
+export function worker(tab: {
+  id: number;
+  url: string;
+  incognito?: boolean;
+  windowId?: number;
+}) {
   let listener: Function;
   const local: Record<string, any> = {};
   const session: Record<string, any> = {
@@ -19,7 +24,7 @@ export function worker(tab: { id: number; url: string; incognito?: boolean }) {
   let command: Function;
   const opened: any[] = [],
     created: any[] = [];
-  let updated: Function, removed: Function;
+  let updated: Function, removed: Function, tabCreated: Function;
   const browserTabs = new Map<number, any>([[tab.id, tab]]),
     activated: any[] = [];
   const event = () => ({ addListener() {} });
@@ -64,7 +69,11 @@ export function worker(tab: { id: number; url: string; incognito?: boolean }) {
         return next;
       },
       sendMessage: async () => ({}),
-      onCreated: event(),
+      onCreated: {
+        addListener(fn: Function) {
+          tabCreated = fn;
+        },
+      },
       onUpdated: {
         addListener(fn: Function) {
           updated = fn;
@@ -105,6 +114,7 @@ export function worker(tab: { id: number; url: string; incognito?: boolean }) {
     URL,
     AbortSignal,
     TextEncoder,
+    structuredClone,
     fetch: async (url: string) => ({
       ok: true,
       json: async () =>
@@ -126,7 +136,7 @@ export function worker(tab: { id: number; url: string; incognito?: boolean }) {
           url,
           tab: { ...tab, url },
         },
-        resolve,
+        (value: any) => resolve(structuredClone(value)),
       ),
     );
   const content = (url: string, incognito = false) =>
@@ -138,7 +148,7 @@ export function worker(tab: { id: number; url: string; incognito?: boolean }) {
           url,
           tab: { id: 8, url, incognito, active: true },
         },
-        resolve,
+        (value: any) => resolve(structuredClone(value)),
       ),
     );
   // A message from the content script on another page, as Chrome would deliver it.
@@ -152,7 +162,7 @@ export function worker(tab: { id: number; url: string; incognito?: boolean }) {
           frameId: 0,
           tab: { id, url, active: true },
         },
-        resolve,
+        (value: any) => resolve(structuredClone(value)),
       ),
     );
   return {
@@ -165,6 +175,10 @@ export function worker(tab: { id: number; url: string; incognito?: boolean }) {
     opened,
     created,
     activated,
+    async newTab(value: any) {
+      browserTabs.set(value.id, value);
+      await tabCreated(value);
+    },
     async navigate(id: number, url: string) {
       const t = browserTabs.get(id);
       t.url = url;

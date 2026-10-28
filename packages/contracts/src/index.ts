@@ -18,7 +18,7 @@ export const Preferences = z.object({
     .max(4)
     .default(["quiz", "matching"]),
   articleCapture: z.boolean().default(true),
-  autoHighlights: z.boolean().default(false),
+  autoHighlights: z.boolean().default(true),
 });
 export const Capture = z.object({
   id: Id,
@@ -155,7 +155,7 @@ export const AnalysisInput = z.object({
   concepts: z.array(Concept).min(1).max(40),
   edges: z.array(Edge).max(70),
   studyItems: z.array(Study).max(40),
-  processedCaptureIds: z.array(Id).max(100),
+  processedCaptureIds: z.array(Id).max(300),
 });
 export type CaptureData = z.infer<typeof Capture>;
 export type AnalysisData = z.infer<typeof AnalysisInput>;

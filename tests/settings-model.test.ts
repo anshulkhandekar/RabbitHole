@@ -55,3 +55,25 @@ test("settings navigation follows the section at the scrolling page's top", asyn
   assert.equal(sectionAt(positions, 250), "Collection");
   assert.equal(sectionAt(positions, 900), "Practice");
 });
+
+test("shared preferences update existing rabbit holes and become defaults for future ones", async () => {
+  const app = worker({ id: 7, url: base + "index.html?workspace=1" });
+  const first = await app.request("start"),
+    second = await app.request("start");
+  const prefs = {
+    depth: "deep",
+    analogy: "gardening",
+    activities: ["quiz"],
+    articleCapture: true,
+    autoHighlights: true,
+  };
+  const shared = await app.request("preferences", {
+    shareSessionPreferences: true,
+    newSessionDefaults: prefs,
+  });
+  assert.deepEqual(shared.sessions[first.active].settings, prefs);
+  assert.deepEqual(shared.sessions[second.active].settings, prefs);
+  const next = await app.request("start");
+  assert.deepEqual(next.sessions[next.active].settings, prefs);
+  assert.equal(next.shareSessionPreferences, true);
+});

@@ -78,7 +78,7 @@ try {
   await research.route("https://www.google.com/**", (r) =>
     r.fulfill({
       contentType: "text/html; charset=utf-8",
-      body: "<html><head><title>GPU research — test fixture</title></head><body><main><h1>GPU research</h1><p>Search fixture only.</p></main></body></html>",
+      body: "<html><head><title>GPU research — test fixture</title></head><body><main><h1>GPU research</h1><section aria-labelledby=overview-title><h2 id=overview-title>AI Overview</h2><p>Graphics processors execute many independent operations together. Their throughput depends on keeping parallel work available.</p><a href=https://research.example/article>Read the source</a></section><p>Search fixture only.</p></main></body></html>",
     }),
   );
   await research.goto("https://www.google.com/search?q=How+GPUs+work");
@@ -104,13 +104,21 @@ try {
     chrome.runtime.sendMessage({ type: "state" }),
   );
   assert.equal(state.sessions[sessionId].captures[0]?.sourceType, "search");
+  assert.ok(
+    state.sessions[sessionId].captures.some(
+      (c: any) =>
+        c.sourceType === "google_ai_overview" &&
+        c.text.includes("parallel work"),
+    ),
+    "Visible AI Overview text must be collected separately from the search",
+  );
   await research.route("https://research.example/**", (r) =>
     r.fulfill({
       contentType: "text/html; charset=utf-8",
       body: `<html><head><title>Parallel computing — test fixture</title></head><body><article><h1>How parallel execution works</h1><p id="passage">${"A GPU uses parallel execution to process many operations at once. ".repeat(14)}</p><p>Independent operations can run together. Dependent operations must wait for inputs. This is synthetic test material.</p></article><input value="DO NOT CAPTURE PASSWORD"><div contenteditable="true">DO NOT CAPTURE EDITABLE TEXT</div></body></html>`,
     }),
   );
-  await research.goto("https://research.example/article");
+  await research.getByRole("link", { name: "Read the source" }).click();
   await research.waitForTimeout(2300);
   state = await ui.evaluate(() =>
     chrome.runtime.sendMessage({ type: "state" }),
@@ -573,6 +581,28 @@ try {
   );
   await ui.setViewportSize({ width: 1280, height: 800 });
   await ui.keyboard.press("Escape");
+  await ui.evaluate(() => {
+    const open = chrome.sidePanel.open.bind(chrome.sidePanel);
+    chrome.sidePanel.open = (options) => {
+      const result = open(options);
+      void result.then(
+        () => {
+          (window as any).__panelOpenResult = "opened";
+        },
+        (error) => {
+          (window as any).__panelOpenResult = String(error.message ?? error);
+        },
+      );
+      return result;
+    };
+  });
+  await ui
+    .getByRole("button", { name: "Back to side panel", exact: true })
+    .click();
+  await expect
+    .poll(() => ui.evaluate(() => (window as any).__panelOpenResult))
+    .toBe("opened");
+  await expect(ui.locator(".workspace-error")).toHaveCount(0);
   for (const colorScheme of ["light", "dark"] as const) {
     await ui.emulateMedia({ colorScheme, reducedMotion: "reduce" });
     await ui.screenshot({
@@ -817,7 +847,7 @@ try {
   assert.deepEqual(failures, []);
   assert.deepEqual(remoteFontRequests, []);
   console.log(
-    "PASS reading first: opt-in trusted selection; programmatic/editable selection excluded; compact indicator pause/resume/hide; disclosure retained across changed storage; measured layered map; scoped quiz with immediate persisted grading; matching checked/persisted; 320px light/dark, offline/paused/handoff states, single primary action, real evidence depth, inferred connections, keyboard selection, local fonts, partial ratings and practice run results; packaged Chrome extension: pregranted website permissions (native prompt untested), automatic search/article capture, input exclusion, highlight, pause, unrelated tab exclusion, explicit include, authenticated sync, persisted fixture display, evidence, recall progress, quiz, flashcard, reload, narrow layout, interrupted delivery, browser profile restart with queued review, retry, and offline deletion without resurrection. Go generation NOT exercised.",
+    "PASS reading first: trusted selection with explicit opt-out; programmatic/editable selection excluded; compact indicator pause/resume/hide; disclosure retained across changed storage; measured layered map; scoped quiz with immediate persisted grading; matching checked/persisted; 320px light/dark, offline/paused/handoff states, single primary action, real evidence depth, inferred connections, keyboard selection, local fonts, partial ratings and practice run results; packaged Chrome extension: pregranted website permissions (native prompt untested), automatic search/AI Overview/article-link capture, native workspace side-panel button, input exclusion, highlight, pause, unrelated tab exclusion, explicit include, authenticated sync, persisted fixture display, evidence, recall progress, quiz, flashcard, reload, narrow layout, interrupted delivery, browser profile restart with queued review, retry, and offline deletion without resurrection. Go generation NOT exercised.",
   );
 } catch (error) {
   console.error("UI failures:", failures);

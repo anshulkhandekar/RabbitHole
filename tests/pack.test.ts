@@ -12,6 +12,6 @@ test("the MCP connector requires per-user bearer authentication without a shared
   assert.deepEqual(pack.networkDomains, ["rabbithole-1c5e.onrender.com"]);
   assert.equal(
     pack.mcpServers[0].endpointUrl,
-    "https://rabbithole-1c5e.onrender.com/mcp?schema=7",
+    "https://rabbithole-1c5e.onrender.com/mcp?schema=8",
   );
 });

@@ -16,3 +16,26 @@ test("overview adapter declines unlabeled or hidden content instead of inventing
   ).window.document;
   assert.equal(overview(doc), null);
 });
+
+test("AI overview detection supports labelled regions and heading-labelled containers without capturing results", () => {
+  const variants = [
+    '<section aria-label="AI Overview"><p>Aluminium and magnesium alloys offer a useful combination of low mass and rigidity for laptop enclosures.</p></section>',
+    '<section aria-labelledby="ai-heading"><h2 id="ai-heading">AI Overview</h2><p>Aluminium and magnesium alloys offer a useful combination of low mass and rigidity for laptop enclosures.</p></section>',
+    '<div data-attrid="SGEAnswer"><div role="heading">AI Overview</div><p>Aluminium and magnesium alloys offer a useful combination of low mass and rigidity for laptop enclosures.</p></div>',
+  ];
+  for (const html of variants) {
+    const doc = new JSDOM(
+      html +
+        "<main>Unrelated organic search results must not be included.</main>",
+    ).window.document;
+    Object.defineProperty(
+      doc.defaultView!.HTMLElement.prototype,
+      "getClientRects",
+      { value: () => [{ width: 200, height: 100 }] },
+    );
+    const result = overview(doc);
+    assert.ok(result);
+    assert.match(result.text, /low mass and rigidity/);
+    assert.doesNotMatch(result.text, /organic search/);
+  }
+});

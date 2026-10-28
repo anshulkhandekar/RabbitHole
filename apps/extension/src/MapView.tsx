@@ -31,6 +31,7 @@ import {
   placeLabels,
   type IdeaPosition,
 } from "./map-layout";
+import { connectionStrength } from "./connection-model";
 import { deriveMemory } from "./practice-model";
 import { routeIds } from "./summary-model";
 import { IdeaDrawer } from "./IdeaDrawer";
@@ -92,6 +93,10 @@ function Connection({ id, data, markerEnd, markerStart }: any) {
           </mask>
         </defs>
       )}
+      <title>
+        {data.label} · {data.strength?.label}
+        {data.inferred ? " · Go inferred" : ""}
+      </title>
       <BaseEdge
         mask={data.gaps?.length ? `url(#map-gap-${id})` : undefined}
         id={id}
@@ -101,7 +106,8 @@ function Connection({ id, data, markerEnd, markerStart }: any) {
         interactionWidth={18}
         style={{
           stroke: data.lit ? "var(--edge-lit)" : "var(--edge)",
-          strokeWidth: data.lit ? 2 : 1.6,
+          strokeWidth:
+            1.4 + (data.strength?.weight ?? 0) * 0.5 + (data.lit ? 0.4 : 0),
           strokeDasharray: data.inferred ? "5 5" : undefined,
         }}
       />
@@ -154,7 +160,8 @@ function Labels({ edges, nodes }: { edges: Edge[]; nodes: IdeaPosition[] }) {
                 visibility: p ? "visible" : "hidden",
               }}
             >
-              {String(e.data?.label)}
+              {String(e.data?.label)} ·{" "}
+              {String((e.data?.strength as any)?.label)}
             </div>
           );
         })}
@@ -449,6 +456,7 @@ function Canvas({
           data: {
             ...connectionGeometry(e, layout.nodes, merged),
             label: e.label,
+            strength: connectionStrength(session, e),
             lit: lit.has(e.id),
             dim: !!focused && !lit.has(e.id),
             inferred: e.evidenceKind !== "supported",
