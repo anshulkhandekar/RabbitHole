@@ -1,14 +1,40 @@
-# Final release and manual rehearsal
+# Testing
 
-Use `/Users/anshulkhandekar/RabbitHole/rabbitv4-2`, branch `anshulkhandekar/rabbitv4-2`. Preserve existing research and configuration. Automated results are in [status](status.md); everything below remains manual until actually observed.
+## Automated checks
 
-## Before the final user pass
+```sh
+npm run check          # typecheck, tests/*.test.ts, production build
+npm run lint           # Prettier checks
+npx playwright install chromium
+npm run test:release   # check, lint and all browser scripts
+git diff --check
+```
 
-1. Confirm which backend commit Render is running. Earlier server fixes require a backend deploy; the latest Practice/map/history/documentation batch adds no server changes. If required fixes are absent, deploy the reviewed backend before diagnosing live behaviour.
-2. Build this checkout, reload RabbitHole at `chrome://extensions`, and refresh research and Go tabs. Keep the same saved credentials and sessions.
-3. Paste Instructions from `rabbitv4-2/integrations/superhuman/agent-instructions.md` into the live Go builder and save. Keep Write Always ask. Schema remains 8; do not release an unchanged connector just to update instructions.
+Set `CHROMIUM_PATH` to an installed Chromium executable if the Playwright-managed browser is unavailable:
 
-## Real-user acceptance
+```sh
+CHROMIUM_PATH='/path/to/chromium' npm run test:release
+```
+
+| Script                        | Coverage                                                                                       |
+| ----------------------------- | ---------------------------------------------------------------------------------------------- |
+| `npm test`                    | Contract/model tests, rendered UI, worker failure/retry behaviour and authenticated MCP saves  |
+| `tests/browser.ts`            | Packaged extension collection, scope, sync, offline recovery, map and practice                 |
+| `tests/ui-refresh-browser.ts` | Map startup/revisions/perimeter, session history, Practice, Settings and notification fixtures |
+| `tests/stage3-browser.ts`     | Search cards, source hide/delete recovery, explanations, practice persistence and exports      |
+| `tests/content-reload.ts`     | Actual extension invalidation and stale content-script cleanup                                 |
+
+`test:browser` runs the first two browser scripts; `test:stage3` and `test:reload` run the others. Browser scripts use built production code, temporary profiles and test-only pregranted permissions. Screenshots are generated under ignored `test-results/`. They do not test native permission dialogs, real Go instruction-following or generated teaching quality.
+
+## Verified baseline
+
+On October 29, 2026, the complete `test:release` gate exited 0 with **219/219 regression tests**, zero skips/failures, typecheck/build, formatting and all four browser scripts passing. Connector validation and `git diff --check` also passed. The map-startup regression reproduced missing handle bounds before the fix; ten focused cold starts passed afterward. The maintained browser suite checks startup, repeated reopen and question-only updates without refreshing the workspace.
+
+These results describe the tested implementation, not a guarantee against all defects or a substitute for the live acceptance pass. Documentation consolidation does not alter application behaviour.
+
+## Manual acceptance
+
+Use intentionally collected public sources, the current deployed backend and the current extension build. Reload the extension and research tabs, confirm matching owner credentials in the extension/Go connector, and update live Instructions from [agent-instructions.md](../integrations/superhuman/agent-instructions.md). Keep Write approval at Always ask.
 
 | Journey                     | Check                                                                                                                                                                                                                                       |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -26,13 +52,6 @@ Use `/Users/anshulkhandekar/RabbitHole/rabbitv4-2`, branch `anshulkhandekar/rabb
 
 Record what actually happened, including approvals, errors and content weaknesses. Do not mark a live case passed from a fixture test. If a defect appears, preserve its error, session/version and reproduction before making a targeted fix.
 
-## Commit and rollout — owner actions
+## Release validation
 
-1. Review `git status --short`, `git diff --stat`, the full diff and intended new regression/docs files. Keep `.env`, data, test-results, dist and node_modules ignored. Do not run a broad clean or delete the installed `dist/extension`.
-2. Run `npm run test:release` with your Chromium executable, then `git diff --check`. Review production and full dependency audit results separately if refreshing them.
-3. Commit the reviewed source/tests/docs, merge to main and deploy the backend. Check health, unauthorized access rejection and saved data persistence. Confirm the deployed commit, rather than assuming a merge has finished deploying.
-4. Reload the built extension and research tabs. Reapply live Instructions from this checkout if not already current. No connector release is needed unless its actual tool schema changes; it remains schema 8 here.
-5. Repeat a short genuine Go save/read-back and Practice smoke check against the final deployed version.
-6. Record and edit the demo, check submission requirements and viewing access, then add real feature GIFs/captions to the README. See [demo](demo.md).
-
-No automatic commit, deployment, publishing or live Go configuration is part of the local test pass.
+Confirm the intended backend commit is deployed, health succeeds, unauthenticated research requests fail and data survives restart. Recheck a genuine Go save/read-back and Practice after rollout. An unchanged schema 8 connector does not need a release for documentation, UI or instruction changes. Record live outcomes separately; fixture results cannot mark manual cases complete.
