@@ -88,6 +88,37 @@ button.hide {
   min-width: 160px;
   font: 400 var(--t-sm)/1.5 var(--font-ui);
 }
+.include-prompt {
+  width: min(260px, calc(100vw - 32px));
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+.article-saved {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+}
+.article-saved button {
+  white-space: nowrap;
+  background: var(--surface-sunk);
+}
+.include-prompt span {
+  flex-basis: 100%;
+}
+.include-prompt button:first-of-type {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+:host([data-edge="left"]) .reading-note {
+  right: auto;
+  left: 0;
+}
 @media print {
   :host {
     display: none;

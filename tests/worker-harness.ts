@@ -23,6 +23,7 @@ export function worker(
     bindings: { tabs: {}, lastCapture: {} },
   };
   const injected: number[] = [];
+  const sent: { id: number; message: any }[] = [];
   let remote: any;
   let command: Function;
   const opened: any[] = [],
@@ -71,7 +72,10 @@ export function worker(
         browserTabs.set(next.id, next);
         return next;
       },
-      sendMessage: async () => ({}),
+      sendMessage: async (id: number, message: any) => {
+        sent.push({ id, message });
+        return {};
+      },
       onCreated: {
         addListener(fn: Function) {
           tabCreated = fn;
@@ -177,6 +181,7 @@ export function worker(
     local,
     session,
     injected,
+    sent,
     opened,
     created,
     activated,

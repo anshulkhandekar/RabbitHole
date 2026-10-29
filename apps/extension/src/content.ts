@@ -73,12 +73,14 @@ declare const __RABBIT_TOKENS__: string;
       !text.trim()
     )
       return;
+    const captureId = crypto.randomUUID(),
+      sessionId = context.id;
     const result = await message({
       type: "capture",
       automatic,
       capture: {
-        id: crypto.randomUUID(),
-        sessionId: context.id,
+        id: captureId,
+        sessionId,
         sourceType: type,
         url: location.href,
         title: document.title.slice(0, 300),
@@ -100,7 +102,10 @@ declare const __RABBIT_TOKENS__: string;
             ? "Search saved"
             : type === "google_ai_overview"
               ? "AI Overview saved"
-              : "Page saved",
+              : "Article saved",
+        type === "article"
+          ? { captureId: result.captureId ?? captureId, sessionId }
+          : undefined,
       );
     }
     return result;
@@ -216,6 +221,10 @@ declare const __RABBIT_TOKENS__: string;
     if (stopped) return;
     if (msg.type === "reading-update") {
       if (msg.rescan) lastArticle = "";
+      if (msg.promptInclude) {
+        includePrompt = location.href;
+        includeSession = msg.sessionId ?? context?.id ?? "";
+      }
       schedule();
       return;
     }
@@ -539,14 +548,24 @@ declare const __RABBIT_TOKENS__: string;
     document.documentElement.append(offerHost);
   }
   let indicator: HTMLElement | undefined,
+    includePrompt = "",
+    includeSession = "",
     noteTimer: ReturnType<typeof setTimeout> | undefined,
     selectionTimer: ReturnType<typeof setTimeout> | undefined,
     dragging = false;
   let intendedSelection: string | undefined;
   function updateIndicator() {
     if (
+      includePrompt &&
+      (includePrompt !== location.href ||
+        includeSession !== context?.id ||
+        context?.included ||
+        context?.status !== "active")
+    )
+      includePrompt = "";
+    if (
       stopped ||
-      !context?.readingMode ||
+      (!context?.readingMode && !includePrompt) ||
       context.excluded.includes(location.href)
     ) {
       indicator?.remove();
@@ -616,6 +635,7 @@ declare const __RABBIT_TOKENS__: string;
       hide.textContent = "Hide";
       hide.title = "Hide indicator; collection keeps its current state";
       hide.onclick = async () => {
+        includePrompt = "";
         await message({
           type: "reading-control",
           control: "hide",
@@ -629,6 +649,47 @@ declare const __RABBIT_TOKENS__: string;
     }
     const active = context.status === "active",
       shadow = indicator.shadowRoot!;
+    if (includePrompt && !shadow.querySelector(".include-prompt")) {
+      const prompt = document.createElement("div");
+      prompt.className = "reading-note include-prompt";
+      prompt.setAttribute("role", "status");
+      const text = document.createElement("span");
+      text.textContent =
+        "This page isn’t being saved. Add this tab to your rabbit hole?";
+      const include = document.createElement("button");
+      include.textContent = "Include tab";
+      include.onclick = async () => {
+        include.disabled = true;
+        const result = await message({
+          type: "reading-include",
+          sessionId: context.id,
+        });
+        if (result?.saved) {
+          includePrompt = "";
+          lastArticle = "";
+          await scan();
+        } else {
+          text.textContent =
+            result?.error ?? "Couldn’t include this tab. Try again.";
+          include.disabled = false;
+        }
+      };
+      const dismiss = document.createElement("button");
+      dismiss.textContent = "Not now";
+      dismiss.onclick = () => {
+        includePrompt = "";
+        updateIndicator();
+      };
+      prompt.append(text, include, dismiss);
+      shadow.append(prompt);
+    } else if (!includePrompt)
+      shadow.querySelector(".include-prompt")?.remove();
+    const prompt = shadow.querySelector<HTMLElement>(".include-prompt");
+    if (prompt) {
+      const above = parseFloat(indicator.style.top) + 210 > innerHeight;
+      prompt.style.top = above ? "auto" : "48px";
+      prompt.style.bottom = above ? "48px" : "auto";
+    }
     if (!widgetDrag && placedPage !== location.href) placeWidget();
     shadow
       .querySelector(".status")!
@@ -655,17 +716,39 @@ declare const __RABBIT_TOKENS__: string;
         `Open RabbitHole; ${context.syncError ? "sync needs attention" : context.handoff === "waiting" ? "waiting for Go’s saved summary" : context.handoff === "stalled" ? "check Go for a failed save or approval" : !active ? "paused" : context.included === false ? "this page is not being collected" : "collecting"}. Drag to move.`,
       );
   }
-  function showReadingNote(message: string) {
+  function showReadingNote(
+    text: string,
+    article?: { captureId: string; sessionId: string },
+  ) {
     if (!indicator) return;
     const shadow = indicator.shadowRoot!;
     shadow.querySelector(".reading-note")?.remove();
     const note = document.createElement("div");
     note.className = "reading-note";
     note.setAttribute("role", "status");
-    note.textContent = message;
+    note.textContent = text;
+    if (article) {
+      note.classList.add("article-saved");
+      const undo = document.createElement("button");
+      undo.textContent = "↶ Undo";
+      undo.setAttribute("aria-label", "Undo article save");
+      undo.onclick = async () => {
+        undo.disabled = true;
+        const result = await message({ type: "reading-undo", ...article });
+        if (result?.removed) showReadingNote("Article removed");
+        else {
+          undo.disabled = false;
+          undo.title = result?.error ?? "Couldn’t undo. Try again.";
+        }
+      };
+      note.append(undo);
+    }
     shadow.append(note);
+    const above = parseFloat(indicator.style.top) + 130 > innerHeight;
+    note.style.top = above ? "auto" : "48px";
+    note.style.bottom = above ? "48px" : "auto";
     clearTimeout(noteTimer);
-    noteTimer = setTimeout(() => note.remove(), 2200);
+    noteTimer = setTimeout(() => note.remove(), article ? 10000 : 2200);
   }
   function scheduleSelection() {
     clearTimeout(selectionTimer);

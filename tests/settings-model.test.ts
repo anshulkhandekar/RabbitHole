@@ -77,3 +77,42 @@ test("shared preferences update existing rabbit holes and become defaults for fu
   assert.deepEqual(next.sessions[next.active].settings, prefs);
   assert.equal(next.shareSessionPreferences, true);
 });
+
+test("refresh does not recreate shared preference uploads when JSON key order differs", async () => {
+  const app = worker({ id: 7, url: base + "index.html?workspace=1" });
+  const start = await app.request("start"),
+    id = start.active,
+    remote = start.sessions[id];
+  // Chrome storage can return keys alphabetically; server validation uses schema order.
+  app.local.state.newSessionDefaults = {
+    activities: ["quiz", "matching"],
+    analogy: "everyday examples",
+    articleCapture: true,
+    autoHighlights: true,
+    depth: "balanced",
+  };
+  app.local.state.shareSessionPreferences = true;
+  app.local.state.config.token = "test-token";
+  app.local.state.queue = [];
+  app.setRemote(remote);
+  for (let i = 0; i < 3; i++) {
+    const refreshed = await app.request("refresh");
+    assert.equal(
+      refreshed.queue.length,
+      0,
+      "unchanged settings must stay synced",
+    );
+    assert.equal(app.local.state.queue.length, 0);
+  }
+
+  app.setRemote({ ...remote, settings: { ...remote.settings, depth: "deep" } });
+  const changed = await app.request("refresh");
+  assert.equal(
+    changed.queue.length,
+    1,
+    "a real preference difference still syncs",
+  );
+  assert.equal(changed.queue[0].body.settings.depth, "balanced");
+  app.setRemote(remote);
+  assert.equal((await app.request("refresh")).queue.length, 0);
+});

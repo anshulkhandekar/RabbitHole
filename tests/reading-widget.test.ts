@@ -50,6 +50,8 @@ async function page(position?: { x: number; y: number }, smallControl = false) {
             if (captured) return { duplicate: true };
             captured = true;
           }
+          if (m.type === "reading-include") context.included = true;
+          if (m.type === "reading-undo") return { removed: true };
           return m.type === "reading-context"
             ? structuredClone(context)
             : { saved: true };
@@ -140,6 +142,69 @@ async function page(position?: { x: number; y: number }, smallControl = false) {
   };
 }
 
+test("resume offers inclusion beside the rabbit and scans immediately after acceptance", async () => {
+  const p = await page();
+  try {
+    p.context.included = false;
+    p.context.readingMode = false;
+    p.context.settings.articleCapture = true;
+    p.listeners.forEach((fn) =>
+      fn({ type: "reading-update", promptInclude: true }),
+    );
+    await p.tick();
+    const prompt = p.host()?.shadowRoot?.querySelector(".include-prompt");
+    assert.ok(
+      prompt,
+      "resume shows a page-local prompt even with the indicator hidden",
+    );
+    assert.match(prompt.textContent!, /isn’t being saved/);
+    assert.equal(p.messages.filter((m) => m.type === "capture").length, 0);
+    prompt.querySelector<HTMLButtonElement>("button")!.click();
+    await p.tick();
+    await p.tick();
+    assert.equal(
+      p.messages.filter((m) => m.type === "reading-include").length,
+      1,
+    );
+    assert.equal(p.messages.filter((m) => m.type === "capture").length, 1);
+    assert.equal(
+      p.host(),
+      null,
+      "acceptance retains the user's hidden-indicator preference",
+    );
+  } finally {
+    await p.dispose();
+  }
+});
+
+test("the article saved notice offers a one-click Undo for that article", async () => {
+  const p = await page();
+  try {
+    p.context.settings.articleCapture = true;
+    await p.update();
+    const saved = p.messages.find((m) => m.type === "capture");
+    const undo = p
+      .host()
+      .shadowRoot!.querySelector<HTMLButtonElement>(".reading-note button");
+    assert.ok(
+      undo,
+      "the saved notice exposes Undo without opening the sidebar",
+    );
+    assert.match(undo.getAttribute("aria-label")!, /undo/i);
+    undo.click();
+    await new Promise((r) => setImmediate(r));
+    const request = p.messages.find((m) => m.type === "reading-undo");
+    assert.equal(request.captureId, saved.capture.id);
+    assert.equal(request.sessionId, "s1");
+    assert.match(
+      p.host().shadowRoot!.querySelector(".reading-note")!.textContent!,
+      /Article removed/,
+    );
+  } finally {
+    await p.dispose();
+  }
+});
+
 test("reading widget follows shared waiting and sync error state without collecting an unrelated page", async () => {
   const p = await page();
   try {
@@ -159,6 +224,40 @@ test("reading widget follows shared waiting and sync error state without collect
     await p.update();
     assert.ok(p.host().shadowRoot!.querySelector(".status.error"));
     assert.equal(p.messages.filter((m) => m.type === "capture").length, 0);
+  } finally {
+    await p.dispose();
+  }
+});
+
+test("resume inclusion can be dismissed and never follows a different session", async () => {
+  const p = await page();
+  try {
+    p.context.included = false;
+    p.context.readingMode = false;
+    const offer = async () => {
+      p.listeners.forEach((fn) =>
+        fn({ type: "reading-update", promptInclude: true, sessionId: "s1" }),
+      );
+      await p.tick();
+    };
+    await offer();
+    const buttons = p
+      .host()
+      .shadowRoot!.querySelectorAll<HTMLButtonElement>(
+        ".include-prompt button",
+      );
+    buttons[1].click();
+    assert.equal(p.host(), null);
+    await p.update();
+    assert.equal(p.host(), null, "dismissal survives the next scan");
+    await offer();
+    p.context.id = "s2";
+    await p.update();
+    assert.equal(
+      p.host(),
+      null,
+      "a prompt belongs only to the resumed session",
+    );
   } finally {
     await p.dispose();
   }
