@@ -37,7 +37,8 @@ export function Summary({
     <div className="summary-scroll">
       <section className="summary-v2">
         <p className="eyebrow">
-          {session.captures.length} sources · updated{" "}
+          {session.captures.length}{" "}
+          {session.captures.length === 1 ? "source" : "sources"} · updated{" "}
           {new Date(session.analyzedAt ?? session.updatedAt).toLocaleString()}
         </p>
         <h1>{session.title}</h1>
@@ -60,7 +61,9 @@ export function Summary({
           ].map(([n, label, fn]) => (
             <button key={String(label)} onClick={fn as () => void}>
               <b>{String(n)}</b>
-              <span>{String(label)}</span>
+              <span>
+                {n === 1 ? String(label).slice(0, -1) : String(label)}
+              </span>
             </button>
           ))}
         </div>
@@ -120,7 +123,7 @@ export function Summary({
               {confident.length
                 ? `${confident.length} confident ${confident.length === 1 ? "miss" : "misses"} to fix first`
                 : shaky.length
-                  ? `${shaky.length} ideas are getting shaky`
+                  ? `${shaky.length} ${shaky.length === 1 ? "idea is" : "ideas are"} getting shaky`
                   : "Keep these ideas bright"}
             </b>
             <span>A quick dig takes about 4 minutes</span>

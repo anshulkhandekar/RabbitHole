@@ -21,9 +21,16 @@ type Local = {
   active?: string;
   tabs: Record<string, string>;
   lastCapture: Record<string, string>;
+  overviewCaptures?: Record<string, string>;
   searchSession?: string;
   excluded: Record<string, string[]>;
-  queue: { id: string; method: string; path: string; body?: unknown }[];
+  queue: {
+    id: string;
+    method: string;
+    path: string;
+    body?: unknown;
+    noteOnly?: boolean;
+  }[];
   config: { backend: string; token: string; agentUrl: string };
   error?: string;
   readingMode?: boolean;
@@ -67,6 +74,7 @@ const load = async (): Promise<Local> => {
     | {
         tabs: Record<string, string>;
         lastCapture: Record<string, string>;
+        overviewCaptures?: Record<string, string>;
         searchSession?: string;
         offers?: Record<string, Offer>;
         hush?: Record<string, number>;
@@ -78,6 +86,7 @@ const load = async (): Promise<Local> => {
   state.offers = bindings?.offers ?? {};
   state.hush = bindings?.hush ?? {};
   state.lastCapture = bindings?.lastCapture ?? {};
+  state.overviewCaptures = bindings?.overviewCaptures ?? {};
   state.searchSession = bindings?.searchSession;
   for (const [id, handoff] of Object.entries(state.handoffs ?? {}))
     if (state.sessions[id])
@@ -118,6 +127,7 @@ const persist = async (s: Local) => {
       offers: {},
       hush: {},
       goTabs: {},
+      overviewCaptures: {},
     },
   });
   await chrome.storage.session.set({
@@ -125,6 +135,7 @@ const persist = async (s: Local) => {
       tabs: s.tabs,
       goTabs: s.goTabs,
       lastCapture: s.lastCapture,
+      overviewCaptures: s.overviewCaptures,
       searchSession: s.searchSession,
       offers: s.offers,
       hush: s.hush,
@@ -147,6 +158,9 @@ function enrollSearch(s: Local, tab?: chrome.tabs.Tab) {
   if (
     tab?.id !== undefined &&
     tab.active &&
+    (!s.tabs[tab.id] ||
+      s.tabs[tab.id] === session?.id ||
+      !s.sessions[s.tabs[tab.id]]) &&
     !tab.incognito &&
     session?.status === "active" &&
     s.searchSession === session.id &&
@@ -237,6 +251,8 @@ async function removeCapture(s: Local, session: Session, captureId: string) {
   );
   // A queued POST may already have committed remotely before its response failed.
   enqueue(s, "DELETE", path);
+  for (const [key, id] of Object.entries(s.overviewCaptures ?? {}))
+    if (id === captureId) delete s.overviewCaptures![key];
   for (const [tab, last] of Object.entries(s.lastCapture))
     if (last === captureId) delete s.lastCapture[tab];
 }
@@ -281,6 +297,21 @@ async function flush(s: Local) {
         signal: AbortSignal.timeout(10000),
       });
       if (!r.ok) {
+        if (
+          r.status === 409 &&
+          q.method === "POST" &&
+          /^\/api\/sessions\/[^/]+\/reviews$/.test(q.path)
+        ) {
+          // The checked attempt is retained locally; changed questions cannot be graded remotely.
+          const sessionId = q.path.split("/")[3],
+            attempt = s.sessions[sessionId]?.attempts.find(
+              (a) => a.id === (q.body as any)?.id,
+            );
+          if (attempt && !q.noteOnly) attempt.localOnly = true;
+          s.queue.shift();
+          await persist(s);
+          continue;
+        }
         if (r.status === 404 && q.method !== "DELETE") {
           s.error =
             "A session no longer exists on the server. Export local data or delete the local session.";
@@ -462,6 +493,18 @@ async function capture(
     )
   )
     return { duplicate: true };
+  let parentCaptureId: string | undefined = s.lastCapture[tabId];
+  const overviewKey = JSON.stringify([tabId, session.id, parsed.url]);
+  if (parsed.sourceType === "google_ai_overview") {
+    const previous = s.overviewCaptures?.[overviewKey];
+    if (previous && !session.processed.includes(previous)) {
+      parentCaptureId = session.captures.find(
+        (c) => c.id === previous,
+      )?.parentCaptureId;
+      await removeCapture(s, session, previous);
+    }
+    (s.overviewCaptures ??= {})[overviewKey] = parsed.id;
+  }
   if (
     session.captures.length >= 300 ||
     new TextEncoder().encode(JSON.stringify(s)).length +
@@ -475,7 +518,7 @@ async function capture(
     await chrome.action.setBadgeText({ text: "!" });
     throw new Error(s.error);
   }
-  parsed.parentCaptureId = s.lastCapture[tabId];
+  parsed.parentCaptureId = parentCaptureId;
   session.captures.push(parsed);
   s.lastCapture[tabId] = parsed.id;
   if (session.title === "New rabbit hole" && parsed.sourceType === "search")
@@ -628,15 +671,12 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
         const old = s.active ? s.sessions[s.active] : undefined;
         // A search that started a new topic moves out of the old rabbit hole.
         const moved =
-          offer.kind === "switch" &&
-          old?.captures.find(
-            (c) =>
-              c.sourceType === "search" &&
-              c.text === query &&
-              c.url === tab.url &&
-              !old.processed.includes(c.id),
-          );
-        if (old && moved) await removeCapture(s, old, moved.id);
+          offer.kind === "switch"
+            ? (old?.captures.filter(
+                (c) => c.url === tab.url && !old.processed.includes(c.id),
+              ) ?? [])
+            : [];
+        if (old) for (const c of moved) await removeCapture(s, old, c.id);
         delete s.lastCapture[id];
         createSession(s, {
           title: query,
@@ -987,11 +1027,39 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       await persist(s);
     }
     if (msg.type === "review") {
-      const session = s.sessions[msg.id];
-      if (session.version !== msg.attempt.analysisVersion)
-        throw new Error("Refresh study material");
-      session.attempts.push(msg.attempt);
-      enqueue(s, "POST", `/api/sessions/${msg.id}/reviews`, msg.attempt);
+      const session = s.sessions[msg.id],
+        existing = session.attempts.find((a) => a.id === msg.attempt.id);
+      if (existing) {
+        // Retries never create a second answer; later reasoning updates only its note.
+        const noteChanged =
+          msg.attempt.note !== undefined &&
+          existing.note !== String(msg.attempt.note).slice(0, 1000);
+        if (noteChanged)
+          existing.note = String(msg.attempt.note).slice(0, 1000);
+        const queued = s.queue.find(
+          (q) =>
+            q.path === `/api/sessions/${msg.id}/reviews` &&
+            (q.body as any)?.id === existing.id,
+        );
+        if (queued) (queued.body as any).note = existing.note;
+        else if (
+          noteChanged &&
+          !existing.localOnly &&
+          session.version === existing.analysisVersion
+        ) {
+          const { localOnly: _localOnly, ...attempt } = existing;
+          enqueue(s, "POST", `/api/sessions/${msg.id}/reviews`, attempt);
+          s.queue.at(-1)!.noteOnly = true;
+        }
+      } else {
+        const { localOnly: _localOnly, ...attempt } = msg.attempt;
+        if (session.version !== attempt.analysisVersion)
+          attempt.localOnly = true;
+        session.attempts.push(attempt);
+        if (!attempt.localOnly)
+          enqueue(s, "POST", `/api/sessions/${msg.id}/reviews`, attempt);
+      }
+      await persist(s);
     }
     if (
       [
@@ -1055,6 +1123,15 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
                   !remote.removed?.includes(c.id),
               ),
             );
+            remote.attempts = remote.attempts.map((a) => {
+              const saved = local.attempts.find((l) => l.id === a.id);
+              return saved
+                ? {
+                    ...a,
+                    ...(saved.note !== undefined && { note: saved.note }),
+                  }
+                : a;
+            });
             remote.attempts.push(
               ...local.attempts.filter(
                 (a) => !remote.attempts.some((ra) => ra.id === a.id),
@@ -1083,7 +1160,7 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
             }
           }
         }
-        s.error = undefined;
+        if (!s.queue.length) s.error = undefined;
       } catch (e) {
         s.error = e instanceof Error ? e.message : "Offline";
       }

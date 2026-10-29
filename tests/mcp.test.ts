@@ -97,6 +97,35 @@ test("authenticated API and official MCP client complete read → validated writ
     assert.ok(receipt.validationId);
     assert.equal(db.get("alice", "s1").version, 0);
     assert.equal(db.get("alice", "s1").analysis, null);
+    const approvalLogs: unknown[] = [],
+      originalInfo = console.info;
+    let wrongSession: Awaited<ReturnType<typeof client.callTool>>;
+    try {
+      console.info = (...args: unknown[]) => {
+        approvalLogs.push(...args);
+      };
+      wrongSession = await client.callTool({
+        name: "SaveValidatedAnalysis",
+        arguments: { ...receipt.saveArguments, sessionId: "wrong-session" },
+      });
+    } finally {
+      console.info = originalInfo;
+    }
+    assert.equal(
+      JSON.stringify(approvalLogs).includes(receipt.title),
+      false,
+      "retry arguments must not put a private guide title in operational logs",
+    );
+    assert.equal(wrongSession.isError, true);
+    const wrongMessage = JSON.parse(
+      (wrongSession.content as any)[0].text,
+    ).error;
+    assert.match(wrongMessage, /Draft session mismatch.*Nothing was saved/);
+    assert.deepEqual(
+      JSON.parse(wrongMessage.split("saveArguments: ")[1]),
+      receipt.saveArguments,
+    );
+    assert.equal(db.get("alice", "s1").version, 0);
     const saved = await client.callTool({
       name: "SaveValidatedAnalysis",
       arguments: {

@@ -67,7 +67,7 @@ test("the reasoning typed after a miss is saved with the attempt", async () => {
       b.textContent?.startsWith("Continue"),
     )!,
   );
-  assert.equal(saved[0].note, "I mixed up the two");
+  assert.equal(saved.at(-1)!.note, "I mixed up the two");
   assert.equal(saved[0].confidence, undefined);
   await act(async () => root.unmount());
   dom.window.close();

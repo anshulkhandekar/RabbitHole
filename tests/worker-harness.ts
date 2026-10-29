@@ -8,12 +8,15 @@ const bundle = await build({
   write: false,
 });
 export const base = "chrome-extension://test-extension/";
-export function worker(tab: {
-  id: number;
-  url: string;
-  incognito?: boolean;
-  windowId?: number;
-}) {
+export function worker(
+  tab: {
+    id: number;
+    url: string;
+    incognito?: boolean;
+    windowId?: number;
+  },
+  fetcher?: typeof fetch,
+) {
   let listener: Function;
   const local: Record<string, any> = {};
   const session: Record<string, any> = {
@@ -115,13 +118,15 @@ export function worker(tab: {
     AbortSignal,
     TextEncoder,
     structuredClone,
-    fetch: async (url: string) => ({
-      ok: true,
-      json: async () =>
-        structuredClone(
-          url.endsWith("/api/sessions") ? [{ id: remote.id }] : remote,
-        ),
-    }),
+    fetch:
+      fetcher ??
+      (async (url: string) => ({
+        ok: true,
+        json: async () =>
+          structuredClone(
+            url.endsWith("/api/sessions") ? [{ id: remote.id }] : remote,
+          ),
+      })),
   });
   const request = (
     type: string,

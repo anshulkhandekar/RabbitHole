@@ -22,7 +22,11 @@ import { MapView, type Selection } from "./MapView";
 import { shortTitle } from "./summary-model";
 import { Summary } from "./Summary";
 import { ReadyNote } from "./ReadyNote";
-import { handoffPending } from "./handoff-model";
+import {
+  savedReceipt,
+  handoffPending,
+  failedHandoffNote,
+} from "./handoff-model";
 import { Settings } from "./Settings";
 import { Practice, PracticeLoading } from "./Practice";
 import { domain, time } from "./ui-model";
@@ -370,7 +374,7 @@ function App() {
     }
     const prompt =
       custom ??
-      `Process RabbitHole session ${session.id}. Retrieve the current session and ALL pending captures using RabbitHole tools. Follow every nextOffset page before constructing one complete merged analysis in this run. There is no six-capture processing cap. Connect ideas across the entire inspected trail rather than treating each page as a separate topic. Use each capture's short ref exactly in all captureIds, evidence[].captureId and processedCaptureIds; copy expectedVersion and accumulate all inspected pending refs from processingDefaults across every page. Keep canonical IDs already in the existing analysis. Never reconstruct UUIDs. Search queries express interests, not factual support: if this batch has only queries, merge an honest interest-and-gap map, mark the queries you actually considered processed, and do not fabricate source-backed facts or quizzes. Merge evidence-linked concepts and selected activities; include overview plus summary, takeaways [{text, concept}], route [conceptId], concept.main, studyItem.concept and matching pairs[].concept. Write each idea as claim, why, explanation (with buildsOn), steps when sequential, example and boundary; answer my goal if the session has one. For every main idea with substantive evidence, generate basic questions plus apply/transfer practice and meaningful relationships to other ideas where supported. Distinguish inferred connections. Respect the 40-activity total limit. Quiz wrong choices should each reflect a specific wrong belief, with hints and a variantOf sibling for key questions. Run read-only ValidateSessionAnalysis on the complete payload and correct errors BEFORE requesting normal SaveValidatedAnalysis approval using the returned saveArguments (sessionId, validationId, title). Do not retype the guide. If validation is unavailable, stop and report that the connector needs updating. Never repeat an unchanged failed save. Report success only after a saved version, and report remaining pending captures.`;
+      `Process RabbitHole session ${session.id}. Retrieve the current session and ALL pending captures using RabbitHole tools. Follow every nextOffset page before constructing one complete merged analysis in this run. There is no six-capture processing cap. Connect ideas across the entire inspected trail rather than treating each page as a separate topic. Use each capture's short ref exactly in all captureIds, evidence[].captureId and processedCaptureIds; copy expectedVersion and accumulate all inspected pending refs from processingDefaults across every page. Keep canonical IDs already in the existing analysis. Preserve all visible citations and exact quotes on unchanged questions. Only an explicit rebuild may intentionally replace their evidence; explain any correction. Keep my session name unchanged. Never reconstruct UUIDs. Search queries express interests, not factual support: if this batch has only queries, merge an honest interest-and-gap map, mark the queries you actually considered processed, and do not fabricate source-backed facts or quizzes. Merge evidence-linked concepts and selected activities; include overview plus summary, takeaways [{text, concept}], route [conceptId], concept.main, studyItem.concept and matching pairs[].concept. Use typically one main idea per independent subject, with details parented beneath it; do not mark every idea main. Every non-main idea must have a parentId chain that reaches a main idea. Main ideas sit at the root and have no parentId. Require 1–3 exact evidence excerpts for each main idea and each supported edge, drawn from the inspected capture text; if no factual excerpt exists, explain the gap instead of inventing a quote. Write each idea as claim, why, explanation (with buildsOn), steps when sequential, example and boundary; answer my goal if the session has one. For every main idea with substantive evidence, generate basic questions plus apply/transfer practice and meaningful relationships to other ideas where supported. Distinguish inferred connections. Respect the 40-activity total limit. Quiz wrong choices must be plausible misconceptions, never absurd options. On the first substantive pass, include 2–3 variantOf siblings for key questions, plus hints. Run read-only ValidateSessionAnalysis on the complete payload and correct errors BEFORE requesting normal SaveValidatedAnalysis approval using the entire returned saveArguments object verbatim (sessionId, validationId, title). Before calling, compare its sessionId character-for-character to the requested session ID; never reconstruct, splice or swap IDs. A draft mismatch error supplies exact retry arguments: copy those instead of guessing. Do not retype the guide. If validation is unavailable, stop and report that the connector needs updating. Never repeat an unchanged failed save. Report success only after a saved version, and report remaining pending captures.`;
     const receipt = {
       sessionId: session.id,
       prompt,
@@ -767,11 +771,12 @@ function App() {
           <div>
             <strong>Go couldn't save your map</strong>
             <p>
-              {handoff.reason ?? "The save could not be completed."} Your map
-              hasn't changed, and the {handoff.captureIds.length} finds are
-              still waiting.
+              {handoff.reason ?? "The save could not be completed."}{" "}
+              {failedHandoffNote(handoff, session!)}
             </p>
-            <Button onClick={() => void sendToGo()}>Send again</Button>
+            <Button disabled={pending === 0} onClick={() => void sendToGo()}>
+              Send again
+            </Button>
             <Button
               quiet
               onClick={() =>
@@ -798,7 +803,8 @@ function App() {
       <div className="handoff-panel" role="status">
         <strong>Waiting for Go…</strong>
         <p>
-          {handoff.captureIds.length} finds sent{" "}
+          {handoff.captureIds.length}{" "}
+          {handoff.captureIds.length === 1 ? "find" : "finds"} sent{" "}
           {Math.max(
             0,
             Math.floor((Date.now() - Date.parse(handoff.startedAt)) / 60000),
@@ -822,7 +828,7 @@ function App() {
           Cancel
         </Button>
         <details>
-          <summary>Prompt sent to Go</summary>
+          <summary>Prompt copied — paste it in Go</summary>
           <textarea
             aria-label="Go processing prompt"
             readOnly
@@ -1086,8 +1092,7 @@ function App() {
             )}
             {!panel && handoff?.status === "saved" && (
               <span className="map-saved">
-                <Icon name="check" size={14} /> Map updated{" "}
-                {time(handoff.savedAt!)}
+                <Icon name="check" size={14} /> {savedReceipt(handoff)}
               </span>
             )}
             {panel ? (

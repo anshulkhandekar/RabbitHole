@@ -109,7 +109,10 @@ export function createApp(
           JSON.stringify({
             event: "tool_validation_failed",
             kind: e instanceof DomainError ? e.status : 422,
-            detail: e instanceof DomainError ? e.message : undefined,
+            detail:
+              e instanceof DomainError
+                ? e.message.split("saveArguments: ")[0].trimEnd()
+                : undefined,
           }),
         );
         return {

@@ -114,7 +114,16 @@ test("a search off the current topic offers a new rabbit hole and moves the sear
   assert.equal(offer.title, "GPUs");
   app.local.state.sessions[old].captures.push(
     search("c3", old, "best pasta recipes"),
+    {
+      ...search("overview", old, "best pasta recipes"),
+      sourceType: "google_ai_overview",
+    },
+    {
+      ...search("processed", old, "best pasta recipes"),
+      sourceType: "google_ai_overview",
+    },
   );
+  app.local.state.sessions[old].processed = ["processed"];
   await app.fromTab(
     { type: "search-accept", choice: "start" },
     google("best pasta recipes"),
@@ -124,9 +133,9 @@ test("a search off the current topic offers a new rabbit hole and moves the sear
   assert.equal(state.sessions[old].status, "paused");
   assert.deepEqual(
     state.sessions[old].captures.map((c: any) => c.id),
-    ["c1", "c2"],
+    ["c1", "c2", "processed"],
   );
-  assert.deepEqual(state.sessions[old].removed, ["c3"]);
+  assert.deepEqual(state.sessions[old].removed, ["c3", "overview"]);
   assert.equal(state.sessions[state.active].title, "best pasta recipes");
 });
 
@@ -214,4 +223,19 @@ test("finds can be hidden, retagged and deleted; uncertain uploads get a deletio
     null,
     "every page on an excluded site is ignored",
   );
+});
+
+test("a Google tab bound to an existing rabbit hole is not silently rebound", async () => {
+  const url = google("old topic");
+  const app = worker({ id: 7, url });
+  const first = (await app.request("start", { title: "First" })).active;
+  await app.content(url);
+  const second = (await app.request("start", { title: "Second" })).active;
+  assert.notEqual(first, second);
+  await app.content(url);
+  assert.equal(app.session.bindings.tabs[8], first);
+  const offer = await app.fromTab({ type: "search-offer" }, url);
+  assert.equal(offer.kind, "add");
+  await app.fromTab({ type: "search-accept", choice: "add" }, url);
+  assert.equal(app.session.bindings.tabs[8], second);
 });

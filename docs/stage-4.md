@@ -48,3 +48,54 @@ Connection evidence strength is derived locally from the distinct visible articl
 Manual rollout: deploy the backend; build and release the connector from `integrations/superhuman/pack.ts` with `schema=8`; update the live agent instructions using `integrations/superhuman/agent-instructions.md`; refresh the Go connection; reload the built extension and any research tabs. Existing query-only captures cannot acquire the article or AI Overview text retroactively: revisit the source pages in an active included session. There is no need to delete the existing rabbit hole.
 
 Verification covers article save retry, dynamically added text, AI Overview variants, private/excluded tab inheritance, whole-trail handoff and paged MCP reads, shared preferences and legacy explicit highlight opt-outs, and distinct-page relationship metrics. Packaged-browser fixtures exercise an AI Overview plus an actual article-link click, trusted highlighting, the native workspace side-panel button, shared Settings and light/dark connection metrics. Live Google DOM variants, live Go generation/approval, connector release selection, and native browser permission prompts still require the user's rollout test.
+
+## Release fixes — October 28
+
+Handoffs complete on a newer saved version and show the submitted finds still waiting. Practice assigns each question to one topic, including legacy orphan trees, and counts only original basics toward Harder readiness. Stale review POSTs keep their local attempts without blocking later sync; refresh preserves errors for requests still queued. Google topic switches remove every unprocessed capture from that search URL, and automatic enrollment respects tabs bound to another existing session. The existing included-opener inheritance remains covered.
+
+Analogies uses a local text draft saved on blur, and preference patches merge against the latest local state. Evidence drawers show source links and an explicit missing-excerpt hint instead of page openings; cited highlights retain their text. Send-to-Go and the agent instructions require main ideas at the root, parent chains for details, and 1–3 exact excerpts per main idea and supported edge. No server/MCP schema changed; the connector revision remains 8.
+
+Additional fixes coalesce unprocessed AI Overviews per tab/page/session using deletion tombstones, omit stylesheet-hidden text and obvious cookie/consent banners, capture Google queries immediately on initial load, remove Google exclusion actions from overview menus, correct the copied-prompt label, and remove nested Practice main landmarks. The Stage 3 browser harness honors CHROMIUM_PATH, starts rounds from the hub, and drains worker messages from an inert fixture page before seeding storage.
+
+Remaining: F6 (save checked attempts before Continue), F9 (question top-ups with hidden/deleted sources), and the remaining F15 pluralization, hint-assisted result grouping and partial-matching switch warning. These need separate changes; existing behavior is retained. Relevance-aware tab inclusion, F12 model behavior, and F17 title/citation policy are unchanged.
+
+Manual rollout: build the extension with npm run build and reload it at chrome://extensions, then reload research tabs. Update the live Go Instructions field from integrations/superhuman/agent-instructions.md. These fixes change no backend code or MCP tool schema, so no backend deploy or connector release is required. Keep Write approval at Always ask. Existing sessions remain usable.
+
+Automated verification: npm run check (137 tests), npm run lint, git diff --check, and the full CHROMIUM_PATH-configured npm run test:release passed, including both browser suites, Stage 3 and reload.
+
+Live verification is **not done**. After rollout, run a new session with at least 13 captures through Go and approved save; practise while a Go save lands; switch topics using the Google card; compare All topics with the sum of topic totals; and type “busy restaurant kitchens” in Analogies, blur it, then confirm it survives refresh alongside a quick depth change.
+
+## Residual fixes — October 28
+
+Settings saves pending Analogies drafts on Escape, backdrop and close-button dismissal. Coalesced overviews retain their search parent. Ready notes count only processed finds and use singular/plural wording. Harder readiness requires available questions; solid basics without them prompt a Go request. Results retries select Review, fragile correct answers have their own result group, and the switcher warns about unfinished matching progress.
+
+Quiz and matching attempts now persist at check time, before network delivery; Continue, Enter and End advance without recording again. Attempt IDs are idempotent locally and remotely. Reasoning entered afterward updates the same attempt locally and on the server while its version is current; changed-version notes remain local. Note updates cannot alter the checked answer and survive refresh. Stale attempts carry optional browser-only localOnly metadata and a non-blocking explanation; they do not enter server attempt totals. The bunny defaults to the right edge at mid-height, checks underlying controls on initial page placement, and nudges clear without rewriting valid saved positions. Dragging and clamping remain supported.
+
+Question-only validation uses visible evidence, excludes unsupported targets with actionable errors, and appends questions transactionally to the original guide so hidden sources remain recoverable. Approval still rechecks versions, sources and answer keys. Agent instructions and Send-to-Go now emphasize typically one main idea per independent subject, 2–3 siblings on the first substantive pass, and plausible misconception distractors.
+
+Automated verification passed: npm run check (161/161 tests and build), the full CHROMIUM_PATH-configured npm run test:release (both browser suites, Stage 3 and reload), npm run lint, and git diff --check. Live verification of these residual changes is **not done**.
+
+Rollout: merge the reviewed backend changes to main and deploy; build and reload this checkout's extension and research tabs; manually update the live Go Instructions field from rabbitv4-2/integrations/superhuman/agent-instructions.md. No server/MCP wire schema changed; schema remains 8 and no connector release is needed. Keep Write approval at Always ask. Re-run the ten live checks from the residual task, including immediate reload after checking an answer and a question top-up after hiding a source.
+
+## Final residual fixes — October 28
+
+Bunny overlap detection now samples the centre, edge midpoints and corners, and checks interactive-control rectangles, including small header buttons inside its footprint. Temporary nudges retain saved preferences and do not snap back on re-scans. Practice counters reflect durable local attempts before delivery finishes. Practice and Summary use singular count wording. Question-only approval failures caused by newly hidden/deleted sources request ValidateSessionQuestions again without suggesting captureIds edits or mutating data. Article extraction separates titles and blocks and avoids repeating an H1 that matches the title. MCP schema remains 8.
+
+Live verification is **not done**. Remaining manual rollout and checks:
+
+1. Merge to main and deploy the backend.
+2. Reload the extension and research tabs.
+3. Paste the live Instructions from rabbitv4-2/integrations/superhuman/agent-instructions.md.
+4. Run one real Go generation to judge main-idea structure, siblings and distractors.
+5. Run one real partial save or stale answer.
+6. Check the bunny on real Google and Go pages.
+
+## Approval identity and incremental evidence — October 28
+
+Named rabbit holes keep their session titles across Go saves, including renames made after preflight. Only “New rabbit hole” adopts the first guide title automatically; the analysis retains Go's separate guide title. Incremental saves retain visible sources and verified quotes for the same question/answer key, including when hints or feedback improve. Hidden/deleted evidence stays excluded; changed questions do not inherit unrelated old quotes. Explicit rebuilds can intentionally replace citations, and citation limits remain enforced without silent truncation.
+
+Validated saves reject mismatched session/title arguments without writing and return exact retry arguments only for the authenticated owner's live draft. Foreign, expired and unavailable drafts disclose no correction details. Go instructions require comparing the requested session ID before approval and copying saveArguments verbatim. The backend cannot prevent Go from displaying malformed arguments before receiving the write call; that remains a live client check. No tool schema changed; connector schema remains 8.
+
+Deploy the backend, reload the extension/research tabs, and manually paste this checkout's agent instructions. Live verification remains **not done**. The final isolated audit prompt is in docs/final-testing-prompt-2026-10-28.md.
+
+L1/L2 are fixed: deleted-find failures count only submitted finds still present and unprocessed (including hidden finds), and question top-ups distinguish unknown variantOf IDs from saved parents excluded by hidden/deleted sources; live verification remains pending, and L2 requires the backend deploy already listed above.

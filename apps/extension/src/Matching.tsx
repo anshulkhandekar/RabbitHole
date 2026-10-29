@@ -3,9 +3,11 @@ import type { StudyItem } from "./practice-model";
 export function Matching({
   item,
   onComplete,
+  onProgress,
 }: {
   item: StudyItem;
   onComplete: (slips: number, missedConcepts: string[]) => void;
+  onProgress?: (dirty: boolean) => void;
 }) {
   const pairs = item.pairs!,
     [left, setLeft] = useState<number | null>(null),
@@ -52,6 +54,7 @@ export function Matching({
   }, [locked, bad]);
   function pick(side: "left" | "right", i: number) {
     if (locked.includes(i)) return;
+    onProgress?.(true);
     const l = side === "left" ? i : left,
       r = side === "right" ? i : right;
     setLeft(l);

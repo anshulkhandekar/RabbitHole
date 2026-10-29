@@ -9,7 +9,7 @@ const bundle = await build({
   loader: { ".css": "text" },
   define: { __RABBIT_TOKENS__: '""' },
 });
-async function page() {
+async function page(position?: { x: number; y: number }, smallControl = false) {
   const dom = new JSDOM(
     "<article><p>" +
       "Research article with enough source text to extract. ".repeat(20) +
@@ -33,6 +33,7 @@ async function page() {
     readingMode: true,
     excluded: [],
     settings: { articleCapture: false, autoHighlights: false },
+    ...(position && { widgetPosition: position }),
   };
   Object.assign(win, {
     chrome: {
@@ -71,6 +72,47 @@ async function page() {
     }
     await new Promise((r) => setImmediate(r));
   };
+  const header = win.document.createElement("button");
+  header.textContent = smallControl ? "Google Account" : "Share agent";
+  header.style.cssText =
+    "position:fixed;top:9px;right:10px;width:40px;height:40px";
+  win.document.body.prepend(header);
+  const controlRect = {
+    left: win.innerWidth - 47,
+    right: win.innerWidth - 7,
+    top: 9,
+    bottom: 49,
+    width: 40,
+    height: 40,
+  } as DOMRect;
+  header.getBoundingClientRect = () => controlRect;
+  win.document.elementsFromPoint = (x, y) =>
+    smallControl
+      ? x >= controlRect.left &&
+        x <= controlRect.right &&
+        y >= controlRect.top &&
+        y <= controlRect.bottom
+        ? [header]
+        : []
+      : y < 100
+        ? [header]
+        : [];
+  const rect = win.HTMLElement.prototype.getBoundingClientRect;
+  win.HTMLElement.prototype.getBoundingClientRect = function () {
+    if ((this as HTMLElement).dataset.rabbitholeReading) {
+      const left = parseFloat((this as HTMLElement).style.left) || 0;
+      const top = parseFloat((this as HTMLElement).style.top) || 0;
+      return {
+        left,
+        top,
+        right: left + (smallControl ? 49 : 44),
+        bottom: top + (smallControl ? 42 : 40),
+        width: smallControl ? 49 : 44,
+        height: smallControl ? 42 : 40,
+      } as DOMRect;
+    }
+    return rect.call(this);
+  };
   win.eval(bundle.outputFiles[0].text);
   await tick();
   const host = () =>
@@ -93,6 +135,7 @@ async function page() {
     host,
     update,
     listeners,
+    controlRect,
     dispose,
   };
 }
@@ -174,6 +217,60 @@ test("a saved highlight gives immediate feedback but duplicates do not reflash",
       p.listeners[0]({ type: "highlight" }, {}, () => resolve()),
     );
     assert.equal(p.host().shadowRoot!.querySelector(".status.saved"), null);
+  } finally {
+    await p.dispose();
+  }
+});
+
+test("default bunny position avoids header controls", async () => {
+  const p = await page();
+  try {
+    assert.ok(parseFloat(p.host().style.top) >= 100);
+  } finally {
+    await p.dispose();
+  }
+});
+test("a saved overlapping bunny is nudged once per page without rewriting its saved preference", async () => {
+  const p = await page({ x: 1, y: 0 });
+  try {
+    assert.ok(parseFloat(p.host().style.top) >= 100);
+    const placed = p.host().style.top;
+    assert.equal(
+      p.messages.filter((m) => m.type === "reading-position").length,
+      0,
+    );
+    await p.update();
+    assert.equal(p.host().style.top, placed);
+    assert.deepEqual(p.context.widgetPosition, { x: 1, y: 0 });
+  } finally {
+    await p.dispose();
+  }
+});
+
+test("a small account button inside the bunny footprint is cleared without changing its saved position", async () => {
+  const p = await page({ x: 1, y: 0 }, true);
+  try {
+    const clear = () => {
+      const a = p.host().getBoundingClientRect(),
+        b = p.controlRect;
+      assert.ok(
+        a.right <= b.left ||
+          a.left >= b.right ||
+          a.bottom <= b.top ||
+          a.top >= b.bottom,
+        "widget must not intersect the 40px header button",
+      );
+    };
+    clear();
+    const top = p.host().style.top;
+    await p.update();
+    clear();
+    assert.equal(p.host().style.top, top);
+    assert.deepEqual(p.context.widgetPosition, { x: 1, y: 0 });
+    assert.equal(
+      p.messages.filter((m) => m.type === "reading-position").length,
+      0,
+    );
   } finally {
     await p.dispose();
   }

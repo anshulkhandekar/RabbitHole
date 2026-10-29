@@ -55,7 +55,7 @@ function CaptureMenu({
     ...(capture.tag !== "none"
       ? ([["untag", "Clear mark"]] as [CaptureAction, string][])
       : []),
-    ...(capture.sourceType !== "search" && capture.sourceType !== "highlight"
+    ...(capture.sourceType === "article"
       ? ([
           ["exclude", "Never save this page"],
           ["exclude-site", `Never save ${domain(capture.url)}`],
@@ -118,16 +118,18 @@ export function SourceQuote({
         This source is hidden or removed. Rebuild with Go to update the guide.
       </p>
     );
-  const excerpt = quote ?? capture.text.slice(0, 180);
+  const excerpt =
+    quote || (capture.sourceType === "highlight" ? capture.text : "");
   return (
     <blockquote
       className={`source-quote ${capture.sourceType === "highlight" ? "quoted-highlight" : ""}`}
     >
-      <div className="quoted-text">
-        {excerpt}
-        {!quote && capture.text.length > excerpt.length ? "…" : ""}
-      </div>
-      {capture.text !== excerpt && (
+      {excerpt ? (
+        <div className="quoted-text">{excerpt}</div>
+      ) : (
+        <p>No excerpt saved — Rebuild with Go to add quotes.</p>
+      )}
+      {excerpt && capture.text !== excerpt && (
         <details>
           <summary>Read captured text</summary>
           <div className="quoted-text">{capture.text}</div>

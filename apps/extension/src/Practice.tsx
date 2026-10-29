@@ -7,6 +7,7 @@ import { Matching } from "./Matching";
 import {
   practiceHub,
   harderReady,
+  localOnlyNotice,
   harderLockReason,
   roundQueue,
   type Lane,
@@ -52,7 +53,7 @@ export function PracticeLoading({
           <div className="practice-skeleton" key={i} />
         ))}
       </nav>
-      <main className="practice-main">
+      <div className="practice-main">
         <h1>{name}</h1>
         <p role="status">Loading your questions…</p>
         <div className="practice-skeleton skeleton-bar" />
@@ -94,7 +95,7 @@ export function PracticeLoading({
         <h3 className="practice-label">ACTIVITY</h3>
         <div className="practice-skeleton" />
         {slow && <Button onClick={onRetry}>Try again</Button>}
-      </main>
+      </div>
     </section>
   );
 }
@@ -286,12 +287,29 @@ export function Practice({
     [saveError, setSaveError] = useState(""),
     [confidence, setConfidence] = useState<Confidence | null>(null),
     [hints, setHints] = useState(0),
-    [note, setNote] = useState("");
+    [note, setNote] = useState(""),
+    [matchingProgress, setMatchingProgress] = useState(false);
   const guard = useRef(false),
     attemptRef = useRef<Attempt | null>(null),
+    attemptSaved = useRef(false),
+    roundVersion = useRef(session.version),
     host = useRef<HTMLElement>(null),
     heading = useRef<HTMLHeadingElement>(null);
   const item = queue[index];
+  const savedIds = new Set(results.map((r) => r.attempt.id));
+  if (
+    pending &&
+    attemptRef.current &&
+    session.attempts.some((a) => a.id === attemptRef.current!.id)
+  )
+    savedIds.add(attemptRef.current.id);
+  const savedCount = savedIds.size;
+  const localNote = localOnlyNotice(session.attempts);
+  const keptNotice = localNote ? (
+    <p className="saved-note" role="status">
+      {localNote}
+    </p>
+  ) : null;
   function reset() {
     setChoice(null);
     setAnswer("");
@@ -303,6 +321,8 @@ export function Practice({
     setHints(0);
     setNote("");
     attemptRef.current = null;
+    attemptSaved.current = false;
+    setMatchingProgress(false);
     guard.current = false;
   }
   function start(q: StudyItem[], name: string) {
@@ -310,6 +330,7 @@ export function Practice({
       onToast("No saved activities for these ideas. Ask Go to create them.");
       return;
     }
+    roundVersion.current = session.version;
     setQueue(q);
     setIndex(0);
     setResults([]);
@@ -326,7 +347,7 @@ export function Practice({
   function finish() {
     if (saving) return;
     if (pending) {
-      void record(pending.result, pending.slips, pending.missed, true);
+      void continueChecked(true);
       return;
     }
     setScreen(results.length ? "done" : "home");
@@ -337,11 +358,46 @@ export function Practice({
     setChoice(i);
     setPending({ result: i === item.correctIndex ? "right" : "wrong" });
   }
+  useEffect(() => {
+    if (pending)
+      void record(pending.result, pending.slips, pending.missed, false, false);
+  }, [pending]);
+  function advance(endRun = false) {
+    if (endRun || index + 1 === queue.length) {
+      setScreen("done");
+      setPending(null);
+    } else {
+      setIndex(index + 1);
+      reset();
+    }
+  }
+  async function continueChecked(endRun = false) {
+    if (guard.current || !pending) return;
+    if (!attemptSaved.current)
+      await record(pending.result, pending.slips, pending.missed, false, false);
+    if (attemptSaved.current) advance(endRun);
+  }
+  function updateNote(value: string) {
+    setNote(value);
+    if (!attemptRef.current) return;
+    const attempt = {
+      ...attemptRef.current,
+      note: value.trim().slice(0, 1000),
+    };
+    attemptRef.current = attempt;
+    setResults((old) =>
+      old.map((r) => (r.attempt.id === attempt.id ? { ...r, attempt } : r)),
+    );
+    void onReview(attempt).catch(() =>
+      setSaveError("Couldn’t save this note. Try again."),
+    );
+  }
   async function record(
     result: Result,
     slips?: number,
     missed?: string[],
     endRun = false,
+    advanceAfter = true,
   ) {
     if (guard.current) return;
     guard.current = true;
@@ -352,7 +408,7 @@ export function Practice({
       ({
         id: crypto.randomUUID(),
         studyId: item.id,
-        analysisVersion: session.version,
+        analysisVersion: roundVersion.current,
         response:
           item.type === "matching"
             ? JSON.stringify({
@@ -386,15 +442,13 @@ export function Practice({
         setSaveError("Couldn’t save this answer. Try again.");
         return;
       }
-      const next = [...results, { item, result, attempt }];
-      setResults(next);
-      if (endRun || index + 1 === queue.length) {
-        setScreen("done");
-        setPending(null);
-      } else {
-        setIndex(index + 1);
-        reset();
-      }
+      attemptSaved.current = true;
+      const savedAttempt = attemptRef.current ?? attempt;
+      setResults((old) => [
+        ...old.filter((r) => r.attempt.id !== savedAttempt.id),
+        { item, result, attempt: savedAttempt },
+      ]);
+      if (advanceAfter) advance(endRun);
     } catch {
       setSaveError("Couldn’t save this answer. Try again.");
     } finally {
@@ -470,7 +524,7 @@ export function Practice({
       if (el.closest("button,a,summary") && e.key === "Enter") return;
       if (pending && e.key === "Enter") {
         e.preventDefault();
-        void record(pending.result, pending.slips, pending.missed);
+        void continueChecked();
         return;
       }
       if (
@@ -504,7 +558,9 @@ export function Practice({
       <section className="empty">
         <h2>Practice starts with a saved map</h2>
         <p>
-          You have {session.captures.length} finds. Send them to Go and it will
+          You have {session.captures.length}{" "}
+          {session.captures.length === 1 ? "find" : "finds"}. Send{" "}
+          {session.captures.length === 1 ? "it" : "them"} to Go and it will
           write questions for each main idea it finds.
         </p>
         <Button primary onClick={connected ? onSend : onConnect}>
@@ -551,6 +607,7 @@ export function Practice({
     const count = available(topic).length,
       locked =
         topic.id === "all" ? !readyTopics.length : !harderReady(topic).ready,
+      readyCount = topic.id === "all" ? readyTopics.length : Number(!locked),
       offer =
         preferences.harderOffers !== false
           ? readyTopics.find(
@@ -578,7 +635,10 @@ export function Practice({
         <nav aria-label="Practice topics">
           <div className="topic-label">
             <b>TOPICS</b>
-            <span>{hub.topics.length} main ideas</span>
+            <span>
+              {hub.topics.length} main{" "}
+              {hub.topics.length === 1 ? "idea" : "ideas"}
+            </span>
           </div>
           {[hub.all, ...hub.topics].map((t, i) => (
             <React.Fragment key={t.id}>
@@ -612,9 +672,12 @@ export function Practice({
                     "No questions yet · Ask Go"
                   )}
                 </span>
-                {t.id !== "all" && harderReady(t).ready && (
-                  <Chip kind="new">Ready for harder</Chip>
-                )}
+                {t.id !== "all" &&
+                  (harderReady(t).ready ? (
+                    <Chip kind="new">Ready for harder</Chip>
+                  ) : harderReady(t).basicsReady ? (
+                    <small>Basics solid — ask Go for harder questions</small>
+                  ) : null)}
               </button>
             </React.Fragment>
           ))}
@@ -623,20 +686,26 @@ export function Practice({
             inside them.
           </p>
         </nav>
-        <main className="practice-main">
+        <div className="practice-main">
+          {keptNotice}
           {incomplete && !bankDismissed && (
             <aside className="bank-banner">
               <Icon name="info" />
               <div>
                 <h3>
-                  Go wrote questions for {covered} of {hub.topics.length} topics
+                  Go wrote questions for {covered} of {hub.topics.length}{" "}
+                  {hub.topics.length === 1 ? "topic" : "topics"}
                 </h3>
                 <p>
                   {hub.coverage.emptyTopics.length
                     ? `${hub.coverage.emptyTopics.map((t) => `${t.name} (concept ${t.id})`).join(", ")} has none yet. `
                     : ""}
                   Harder questions exist for{" "}
-                  {hub.topics.length - missingHarder.length} topics.
+                  {hub.topics.length - missingHarder.length}{" "}
+                  {hub.topics.length - missingHarder.length === 1
+                    ? "topic"
+                    : "topics"}
+                  .
                   {hub.coverage.missingLanes.some((m) => m.lane === "review") &&
                     " Some topics still need review variants."}{" "}
                   You can practice everything else now.
@@ -652,8 +721,9 @@ export function Practice({
           )}
           <h1>{topic.name}</h1>
           <p>
-            {hub.all.total} saved questions across {covered} of{" "}
-            {hub.topics.length} topics
+            {hub.all.total} saved{" "}
+            {hub.all.total === 1 ? "question" : "questions"} across {covered} of{" "}
+            {hub.topics.length} {hub.topics.length === 1 ? "topic" : "topics"}
           </p>
           {bar(topic, true)}
           <div className="mastery-legend">
@@ -678,7 +748,7 @@ export function Practice({
                     ? `${topic.lanes.new.length} untested`
                     : l === "review"
                       ? `${topic.lanes.review.length} to review`
-                      : `Ready on ${topic.id === "all" ? readyTopics.length : Number(!locked)} topic${readyTopics.length === 1 ? "" : "s"}`}
+                      : `Ready on ${readyCount} topic${readyCount === 1 ? "" : "s"}`}
                 </b>
                 {l === "review" && topic.confidentMisses > 0 && (
                   <Chip kind="new">{topic.confidentMisses} confident</Chip>
@@ -719,14 +789,17 @@ export function Practice({
               >
                 Start {count}{" "}
                 {lane === "new"
-                  ? "new questions"
+                  ? `new ${count === 1 ? "question" : "questions"}`
                   : lane === "review"
-                    ? "reviews"
-                    : "harder questions"}{" "}
+                    ? count === 1
+                      ? "review"
+                      : "reviews"
+                    : `harder ${count === 1 ? "question" : "questions"}`}{" "}
                 <kbd>Enter</kbd>
               </Button>
               <span>
-                About {Math.max(1, Math.ceil(count / 2))} minutes ·{" "}
+                About {Math.max(1, Math.ceil(count / 2))}{" "}
+                {Math.ceil(count / 2) <= 1 ? "minute" : "minutes"} ·{" "}
                 {activity === "mixed"
                   ? "mixed activities"
                   : modes.find((m) => m[0] === activity)?.[1]}{" "}
@@ -805,7 +878,8 @@ export function Practice({
               <p>{offer.name}</p>
               <h2>Ready for harder questions?</h2>
               <p>
-                You've answered all {offer.basicTotal} basic questions here,{" "}
+                You've answered all {offer.basicTotal} basic{" "}
+                {offer.basicTotal === 1 ? "question" : "questions"} here,{" "}
                 {offer.rightWithoutHints} of them right without hints. Harder
                 questions ask you to use the idea somewhere new.
               </p>
@@ -813,7 +887,8 @@ export function Practice({
                 primary
                 onClick={() => startTopic(offer, "harder", 5, "mixed")}
               >
-                Try {Math.min(5, offer.lanes.harder.length)} harder questions
+                Try {Math.min(5, offer.lanes.harder.length)} harder{" "}
+                {offer.lanes.harder.length === 1 ? "question" : "questions"}
               </Button>
               <Button
                 quiet
@@ -830,7 +905,7 @@ export function Practice({
               </Button>
             </aside>
           )}
-        </main>
+        </div>
       </section>
     );
   }
@@ -838,14 +913,19 @@ export function Practice({
     const right = results.filter((r) => r.result === "right").length,
       pct = results.length ? right / results.length : 0,
       net: Record<string, number> = {};
-    results.forEach((r) =>
+    results.forEach((r) => {
+      if (
+        r.result === "right" &&
+        (r.attempt.confidence === "guess" || (r.attempt.hintsUsed ?? 0) > 0)
+      )
+        return;
       conceptsOf(r.item).forEach(
         (id) =>
           (net[id] =
             (net[id] ?? 0) +
             (attemptResult(r.item, r.attempt, id) === "right" ? 1 : -1)),
-      ),
-    );
+      );
+    });
     const brighter = Object.keys(net).filter((id) => net[id] > 0),
       missed = Object.keys(net).filter((id) => net[id] <= 0),
       misses = results.filter((r) => r.result !== "right"),
@@ -864,6 +944,7 @@ export function Practice({
     return (
       <section className="practice-v2" ref={host}>
         <div className="practice-column results-v2">
+          {keptNotice}
           <div
             className="score-ring"
             style={{ "--score": pct } as React.CSSProperties}
@@ -896,6 +977,10 @@ export function Practice({
             {[
               [brighter, "Got brighter"],
               [missed, "Worth another look"],
+              [
+                [...new Set(lucky.flatMap((r) => conceptsOf(r.item)))],
+                "Right, not strong yet",
+              ],
             ].map(([list, name], i) => (
               <section key={i}>
                 <h3>
@@ -924,7 +1009,10 @@ export function Practice({
               <Button
                 primary
                 className="btn-lg"
-                onClick={() => start(retry, "Review")}
+                onClick={() => {
+                  setLane("review");
+                  start(retry, "Review");
+                }}
               >
                 Review the {retry.length} you missed
               </Button>
@@ -958,6 +1046,7 @@ export function Practice({
   return (
     <section className="practice-v2" ref={host}>
       <div className="practice-column">
+        {keptNotice}
         <div className="round-header">
           <Button quiet onClick={finish}>
             ‹ Practice
@@ -1042,10 +1131,15 @@ export function Practice({
                     </p>
                   )}
                 <p className="saved-note">
-                  Your {results.length} checked answers are saved. Switching
-                  ends this round and starts a new one on the topic you pick.
-                  {(choice !== null || answer || pending) &&
-                    ` Your unchecked pick on question ${index + 1} won't be kept.`}
+                  Your {savedCount} checked{" "}
+                  {savedCount === 1 ? "answer is" : "answers are"} saved.
+                  Switching ends this round and starts a new one on the topic
+                  you pick.
+                  {matchingProgress && !pending
+                    ? ` Your unchecked matching progress on question ${index + 1} won't be kept.`
+                    : !pending && (choice !== null || answer)
+                      ? ` Your unchecked pick on question ${index + 1} won't be kept.`
+                      : null}
                 </p>
               </div>
             )}
@@ -1065,8 +1159,9 @@ export function Practice({
               ))}
             </div>
             <span className="saved-note">
-              <Icon name="check" size={14} /> {results.length} answers saved ·
-              question {index + 1} of {queue.length}
+              <Icon name="check" size={14} /> {savedCount}{" "}
+              {savedCount === 1 ? "answer" : "answers"} saved · question{" "}
+              {index + 1} of {queue.length}
             </span>
           </div>
           <Button
@@ -1158,6 +1253,7 @@ export function Practice({
             <Matching
               key={index}
               item={item}
+              onProgress={setMatchingProgress}
               onComplete={(slips, missed) =>
                 setPending({
                   result: slips ? "partial" : "right",
@@ -1348,7 +1444,7 @@ export function Practice({
                   className="field"
                   maxLength={1000}
                   value={note}
-                  onChange={(e) => setNote(e.target.value)}
+                  onChange={(e) => updateNote(e.target.value)}
                 />
               </label>
             )}
@@ -1365,9 +1461,7 @@ export function Practice({
               primary
               className="btn-lg"
               disabled={saving}
-              onClick={() =>
-                void record(pending.result, pending.slips, pending.missed)
-              }
+              onClick={() => void continueChecked()}
             >
               {saving ? "Saving…" : "Continue"} <kbd>Enter</kbd>
             </Button>
