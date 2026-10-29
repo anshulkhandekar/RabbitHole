@@ -2,16 +2,68 @@ import ELK from "elkjs/lib/elk.bundled.js";
 import type {
   AnalysisData,
   CaptureData,
+  Session,
 } from "../../../packages/contracts/src/index";
 import { chronological } from "./ui-model";
 type Relation = AnalysisData["edges"][number];
 export type MergedEdge = Relation & { ids: string[]; twoWay: boolean };
 export type Box = { x: number; y: number; width: number; height: number };
+export function boundedMapViewport(
+  viewport: { x: number; y: number; zoom: number },
+  nodes: Box[],
+  width: number,
+  height: number,
+) {
+  if (!nodes.length || width <= 0 || height <= 0) return viewport;
+  const clamp = (offset: number, low: number, high: number, size: number) => {
+    const padding = Math.min(160, size / 3),
+      start = padding - low * viewport.zoom,
+      end = size - padding - high * viewport.zoom;
+    return Math.max(
+      Math.min(start, end),
+      Math.min(Math.max(start, end), offset),
+    );
+  };
+  return {
+    x: clamp(
+      viewport.x,
+      Math.min(...nodes.map((n) => n.x)),
+      Math.max(...nodes.map((n) => n.x + n.width)),
+      width,
+    ),
+    y: clamp(
+      viewport.y,
+      Math.min(...nodes.map((n) => n.y)),
+      Math.max(...nodes.map((n) => n.y + n.height)),
+      height,
+    ),
+    zoom: viewport.zoom,
+  };
+}
 export type IdeaPosition = Box & {
   id: string;
   row: number;
   depth: number | null;
 };
+// Questions and attempts do not change card measurements or connection routes.
+// Source visibility can change the graph without changing the saved version.
+export function mapLayoutKey(
+  session: Pick<Session, "id" | "analysis" | "captures">,
+) {
+  return `${session.id}:${JSON.stringify([
+    session.analysis?.overview?.rootConceptId,
+    session.analysis?.concepts.map((c) => [
+      c.id,
+      c.label,
+      c.main,
+      c.parentId,
+      c.gap,
+      c.captureIds,
+    ]),
+    session.analysis?.edges.map((e) => [e.id, e.source, e.target]),
+    session.captures.map((c) => [c.id, c.timestamp]),
+  ])}`;
+}
 export function mergeEdges(edges: Relation[]): MergedEdge[] {
   const groups = new Map<string, MergedEdge>();
   for (const e of edges) {
@@ -200,6 +252,19 @@ export async function layoutIdeas(
   });
   // ELK may create extra ranks for same-depth relationships. Preserve its crossing-minimised order,
   // then compact each depth into one measured row as required by the trail ruler.
+  const byId = new Map(analysis.concepts.map((c) => [c.id, c]));
+  const topicOf = (id: string) => {
+    const seen = new Set<string>();
+    while (!seen.has(id)) {
+      seen.add(id);
+      const c = byId.get(id);
+      if (!c || c.main || !c.parentId || !byId.has(c.parentId)) return id;
+      id = c.parentId;
+    }
+    return [...seen].sort()[0];
+  };
+  const topics = [...new Set(analysis.concepts.map((c) => topicOf(c.id)))],
+    columnWidth = Math.max(...[...sizes.values()].map((s) => s.width)) + 80;
   const nodes: IdeaPosition[] = [],
     rows: {
       depth: number | null;
@@ -213,8 +278,17 @@ export async function layoutIdeas(
       .children!.filter((c) => depth.get(c.id) === d)
       .sort((a, b) => (a.x ?? 0) - (b.x ?? 0) || a.id.localeCompare(b.id));
     const height = Math.max(...members.map((c) => c.height!));
-    let x = 0;
+    const occupied: { x: number; width: number }[] = [];
     for (const c of members) {
+      let x = (topics.indexOf(topicOf(c.id)) % 3) * columnWidth;
+      let overlap;
+      while (
+        (overlap = occupied.find(
+          (p) => x < p.x + p.width + 64 && x + c.width! + 64 > p.x,
+        ))
+      )
+        x = overlap.x + overlap.width + 80;
+      occupied.push({ x, width: c.width! });
       nodes.push({
         id: c.id,
         x,
@@ -224,7 +298,6 @@ export async function layoutIdeas(
         row,
         depth: d,
       });
-      x += c.width! + 64;
     }
     rows.push({
       depth: d,

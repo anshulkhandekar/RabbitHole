@@ -1,3 +1,5 @@
+> Historical checkpoint / audit. For the current build, use the [documentation index](README.md), [status](status.md) and [release checklist](release-checklist.md). Dated results below are not current live sign-off.
+
 # Stage 3 — October 27, 2026
 
 Stage 3 responds to three problems found in daily use: forgetting to start a rabbit hole, no easy way to remove a find, and explanations that were hard to follow. It also borrows several learning ideas from the open-source LearnHarness project, paraphrased rather than copied.

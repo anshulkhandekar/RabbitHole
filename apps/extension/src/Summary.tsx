@@ -1,7 +1,7 @@
 import React from "react";
 import type { Session } from "../../../packages/contracts/src/index";
 import { deriveFlags, deriveMemory } from "./practice-model";
-import { googleSearchUrl } from "./ui-model";
+import { googleSearchUrl, startedDate } from "./ui-model";
 import { mergeEdges } from "./map-layout";
 import { Icon } from "./Icon";
 import { Button } from "./components";
@@ -38,7 +38,11 @@ export function Summary({
       <section className="summary-v2">
         <p className="eyebrow">
           {session.captures.length}{" "}
-          {session.captures.length === 1 ? "source" : "sources"} · updated{" "}
+          {session.captures.length === 1 ? "source" : "sources"} ·{" "}
+          <time dateTime={session.createdAt}>
+            Started {startedDate(session.createdAt)}
+          </time>{" "}
+          · Guide updated{" "}
           {new Date(session.analyzedAt ?? session.updatedAt).toLocaleString()}
         </p>
         <h1>{session.title}</h1>

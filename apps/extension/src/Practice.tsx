@@ -70,7 +70,7 @@ export function PracticeLoading({
               [
                 "New questions",
                 "quiz",
-                "Questions you haven't answered yet. Starts with the basics of each topic.",
+                "Unanswered original questions, easy first. Retry versions appear only after a miss.",
               ],
               [
                 "Review misses",
@@ -148,6 +148,14 @@ export function Practice({
     [activity, setActivity] = useState<Activity>("mixed"),
     [switcher, setSwitcher] = useState(false),
     [bankDismissed, setBankDismissed] = useState(false),
+    [requestOpen, setRequestOpen] = useState(false),
+    [requestCount, setRequestCount] = useState(12),
+    [requestLevels, setRequestLevels] = useState([
+      "understand",
+      "apply",
+      "transfer",
+    ]),
+    [requestTopic, setRequestTopic] = useState("all"),
     [dismissed, setDismissed] = useState<string[]>(
       session.practice?.dismissedHarder ?? [],
     );
@@ -588,7 +596,7 @@ export function Practice({
     return (
       <div
         className={`mastery-bar ${large ? "large" : ""}`}
-        aria-label={`Strong ${t.strong}, Shaky ${t.shaky}, Confident misses ${t.confidentMisses}, Untested ${t.untested}`}
+        aria-label={`Strong ${t.strong}, Shaky ${t.shaky}, Confident misses ${t.confidentMisses}, Unanswered questions ${t.untested}, Reserved retry versions ${t.reserved}`}
       >
         {(
           [
@@ -607,7 +615,7 @@ export function Practice({
     const count = available(topic).length,
       locked =
         topic.id === "all" ? !readyTopics.length : !harderReady(topic).ready,
-      readyCount = topic.id === "all" ? readyTopics.length : Number(!locked),
+      harderCount = locked ? 0 : available(topic, "harder", 40, "mixed").length,
       offer =
         preferences.harderOffers !== false
           ? readyTopics.find(
@@ -620,16 +628,44 @@ export function Practice({
       covered = hub.topics.filter((t) => t.total).length,
       missingHarder = hub.topics.filter(
         (t) =>
-          !t.items.some((i) => i.level === "apply" || i.level === "transfer"),
+          !t.items.some(
+            (i) =>
+              !i.variantOf && (i.level === "apply" || i.level === "transfer"),
+          ),
       ),
-      incomplete =
-        hub.coverage.emptyTopics.length > 0 ||
-        missingHarder.length > 0 ||
-        hub.coverage.missingLanes.some((m) => m.lane === "review"),
-      askMissing = () =>
+      incomplete = hub.coverage.missingLanes.length > 0,
+      capacity = Math.max(0, 40 - items.length),
+      chosenCount = Math.min(
+        capacity,
+        Math.max(1, Math.floor(requestCount || 1)),
+      ),
+      openRequest = (id: string) => {
+        setRequestTopic(id);
+        setRequestCount(Math.min(12, capacity || 1));
+        setRequestOpen(true);
+      },
+      askMissing = () => openRequest("all"),
+      generate = () => {
+        if (!capacity || !requestLevels.length) return;
+        const targets =
+          requestTopic === "all"
+            ? hub.topics
+            : hub.topics.filter((t) => t.id === requestTopic);
         (onGenerate ?? onFeedback)(
-          `For RabbitHole session ${session.id}, retrieve the saved session and evidence, then fill the incomplete question bank. Use the read-only ValidateSessionQuestions tool with sessionId, the current expectedVersion, and only new questions using the saved conceptIds. Do not send or retype captureIds, evidence, concepts or edges: the server attaches saved source IDs and preserves the map. After validation, call SaveValidatedAnalysis with the returned saveArguments for normal approval. Missing topics: ${hub.coverage.emptyTopics.map((t) => `${t.name} (concept ${t.id})`).join(", ") || "none"}. Missing lanes: ${hub.coverage.missingLanes.map((m) => `${m.topicName}: ${m.lane === "review" ? "review variants" : m.lane}`).join("; ")}. Preserve existing IDs, questions and attempts. Do not rewrite the full analysis. If ValidateSessionQuestions is missing, report that the connector needs updating. If the saved explanations contain only interests and gaps, explain what source content is needed instead of inventing factual quiz answers.`,
+          `For RabbitHole session ${session.id}, retrieve the saved session and relevant evidence. Add ${chosenCount} new questions in total across these topics: ${targets.map((t) => `${t.name} (concept ${t.id})`).join("; ")}. Requested levels: ${requestLevels.join(", ")}. Easy means understand the mechanism; medium means apply it in a new scenario; hard means transfer it or reason through a trade-off. Distribute questions across the requested topics and levels, prioritizing missing coverage. Missing coverage: ${
+            hub.coverage.missingLanes
+              .filter(
+                (m) => requestTopic === "all" || m.topicId === requestTopic,
+              )
+              .map(
+                (m) =>
+                  `${m.topicName}: ${m.lane === "review" ? "review variants" : m.lane}`,
+              )
+              .join("; ") || "none"
+          }. Every question must require reasoning, including easy ones. Respect the session’s selected activities. For quizzes, give four parallel, equally plausible choices based on specific plausible misconceptions; no absurd distractors, answer-length clues or verbatim recall. Include distinct scenarios, explain each choice, and do not repeat existing questions. If review variants are missing, allocate a small part of this requested total to variantOf siblings of existing key questions, staying within the selected levels; identify these reserved retry versions in the receipt. Preserve saved IDs, questions, attempts and the map. Only add questions supported by the visible saved ideas; report any evidence gaps. There are ${capacity} total activity slots remaining; do not exceed 40 saved activities including retry variants. Use read-only ValidateSessionQuestions with the current expectedVersion, new IDs and saved conceptIds; do not send captureIds, evidence or a full-map rewrite. Follow with SaveValidatedAnalysis using the returned saveArguments for normal approval.`,
         );
+        setRequestOpen(false);
+      };
     return (
       <section className="practice-hub" ref={host}>
         <nav aria-label="Practice topics">
@@ -650,13 +686,23 @@ export function Practice({
               >
                 <span className="topic-label">
                   <strong>{t.name}</strong>
-                  <span>{t.total} q</span>
+                  <span className="topic-count">
+                    {t.total} {t.total === 1 ? "question" : "questions"}
+                  </span>
                 </span>
                 {bar(t)}
                 <span className="topic-subtitle">
                   {t.total ? (
                     <>
-                      {t.untested} untested
+                      {t.untested} unanswered{" "}
+                      {t.untested === 1 ? "question" : "questions"}
+                      {t.reserved > 0 && (
+                        <small>
+                          {t.reserved} retry{" "}
+                          {t.reserved === 1 ? "version" : "versions"} reserved
+                          for reviews
+                        </small>
+                      )}
                       {t.confidentMisses > 0 && (
                         <>
                           {" "}
@@ -676,7 +722,7 @@ export function Practice({
                   (harderReady(t).ready ? (
                     <Chip kind="new">Ready for harder</Chip>
                   ) : harderReady(t).basicsReady ? (
-                    <small>Basics solid — ask Go for harder questions</small>
+                    <small>{harderLockReason(t)}</small>
                   ) : null)}
               </button>
             </React.Fragment>
@@ -698,14 +744,17 @@ export function Practice({
                 </h3>
                 <p>
                   {hub.coverage.emptyTopics.length
-                    ? `${hub.coverage.emptyTopics.map((t) => `${t.name} (concept ${t.id})`).join(", ")} has none yet. `
+                    ? `${hub.coverage.emptyTopics.map((t) => `${t.name}`).join(", ")} has none yet. `
                     : ""}
-                  Harder questions exist for{" "}
-                  {hub.topics.length - missingHarder.length}{" "}
-                  {hub.topics.length - missingHarder.length === 1
-                    ? "topic"
-                    : "topics"}
-                  .
+                  Across all topics, medium/hard questions are saved for{" "}
+                  {hub.topics.length - missingHarder.length} of{" "}
+                  {hub.topics.length} topics; {readyTopics.length}{" "}
+                  {readyTopics.length === 1 ? "topic has" : "topics have"}{" "}
+                  unanswered harder questions ready to practise. Others may need
+                  easy questions completed or have all harder questions
+                  answered.
+                  {hub.coverage.missingLanes.some((m) => m.lane === "new") &&
+                    " Some topics still need easy questions."}
                   {hub.coverage.missingLanes.some((m) => m.lane === "review") &&
                     " Some topics still need review variants."}{" "}
                   You can practice everything else now.
@@ -719,18 +768,114 @@ export function Practice({
               </div>
             </aside>
           )}
-          <h1>{topic.name}</h1>
+          <div className="practice-heading">
+            <h1>{topic.name}</h1>
+            <Button
+              quiet
+              onClick={() => {
+                setRequestTopic(topic.id);
+                setRequestOpen(true);
+              }}
+            >
+              Add questions
+            </Button>
+          </div>
+          {requestOpen && (
+            <section
+              className="question-request"
+              aria-label="Request questions"
+            >
+              <h2>Choose questions to ask Go for</h2>
+              <div className="question-request-fields">
+                <label>
+                  Topic
+                  <select
+                    aria-label="Question topics"
+                    value={requestTopic}
+                    onChange={(e) => setRequestTopic(e.target.value)}
+                  >
+                    <option value="all">All topics</option>
+                    {hub.topics.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  New questions
+                  <input
+                    aria-label="Number of new questions"
+                    type="number"
+                    min={1}
+                    max={Math.max(1, capacity)}
+                    value={requestCount}
+                    onInput={(e) =>
+                      setRequestCount(Number(e.currentTarget.value))
+                    }
+                  />
+                </label>
+              </div>
+              <fieldset>
+                <legend>Difficulty</legend>
+                {[
+                  ["understand", "Easy — understand"],
+                  ["apply", "Medium — apply"],
+                  ["transfer", "Hard — transfer"],
+                ].map(([level, label]) => (
+                  <label key={level}>
+                    <input
+                      type="checkbox"
+                      aria-label={label}
+                      checked={requestLevels.includes(level)}
+                      onChange={() =>
+                        setRequestLevels((old) =>
+                          old.includes(level)
+                            ? old.filter((l) => l !== level)
+                            : [...old, level],
+                        )
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </fieldset>
+              <p>
+                Easy: explain why. Medium: apply to a new case. Hard: reason
+                through trade-offs. All choices should be plausible.
+              </p>
+              <p>
+                {capacity
+                  ? `${capacity} question slots remain. Go will add up to ${chosenCount} supported questions, including any needed retry versions; existing questions and your map stay intact.`
+                  : "This bank has reached its 40-activity limit. Start a new rabbit hole for more questions."}
+              </p>
+              <Button
+                disabled={!capacity || !requestLevels.length}
+                onClick={generate}
+              >
+                Ask Go to add questions
+              </Button>
+              <Button quiet onClick={() => setRequestOpen(false)}>
+                Cancel
+              </Button>
+            </section>
+          )}
           <p>
-            {hub.all.total} saved{" "}
-            {hub.all.total === 1 ? "question" : "questions"} across {covered} of{" "}
-            {hub.topics.length} {hub.topics.length === 1 ? "topic" : "topics"}
+            {topic.total} saved {topic.total === 1 ? "question" : "questions"}
+            {topic.id === "all"
+              ? ` across ${covered} of ${hub.topics.length} topics`
+              : " in this topic"}
+            . Retry versions are reserved for Review misses.
           </p>
           {bar(topic, true)}
           <div className="mastery-legend">
             <span>Strong {topic.strong}</span>
             <span>Shaky {topic.shaky}</span>
             <span>Confident misses {topic.confidentMisses}</span>
-            <span>Untested {topic.untested}</span>
+            <span>Unanswered questions {topic.untested}</span>
+            {topic.reserved > 0 && (
+              <span>Reserved retry versions {topic.reserved}</span>
+            )}
           </div>
           <h3 className="practice-label">WHAT DO YOU WANT TO PRACTICE?</h3>
           <div className="practice-lanes">
@@ -745,22 +890,24 @@ export function Practice({
                 <strong>{laneNames[l]}</strong>
                 <b>
                   {l === "new"
-                    ? `${topic.lanes.new.length} untested`
+                    ? `${topic.lanes.new.length} unanswered ${topic.lanes.new.length === 1 ? "question" : "questions"}`
                     : l === "review"
-                      ? `${topic.lanes.review.length} to review`
-                      : `Ready on ${readyCount} topic${readyCount === 1 ? "" : "s"}`}
+                      ? `${topic.lanes.review.length} ${topic.lanes.review.length === 1 ? "question" : "questions"} to review`
+                      : `${harderCount} medium/hard ${harderCount === 1 ? "question" : "questions"} ready`}
                 </b>
                 {l === "review" && topic.confidentMisses > 0 && (
                   <Chip kind="new">{topic.confidentMisses} confident</Chip>
                 )}
                 <p>
                   {l === "new"
-                    ? "Questions you haven't answered yet. Starts with the basics of each topic."
+                    ? "Unanswered original questions, easy first. Retry versions appear only after a miss."
                     : l === "review"
                       ? "The ideas you missed, asked a new way. The ones you were sure about come first."
                       : locked && topic.id !== "all"
                         ? harderLockReason(topic)
-                        : `Apply-and-transfer questions. Opens for a topic once its basics hold. Locked on ${hub.topics.length - readyTopics.length}.`}
+                        : topic.id === "all"
+                          ? `${topic.lanes.harder.length} saved medium/hard ${topic.lanes.harder.length === 1 ? "question remains" : "questions remain"} unanswered. Readiness is per topic; some questions may still be locked until its easy answers are solid.`
+                          : "Apply-and-transfer questions ready on this topic."}
                 </p>
               </button>
             ))}
@@ -775,7 +922,7 @@ export function Practice({
               ...modes.map(([value, label]) => ({
                 value,
                 label,
-                count: topic.counts[value],
+                count: available(topic, lane, 40, value).length,
                 disabled: !topic.counts[value],
               })),
             ]}
@@ -808,15 +955,33 @@ export function Practice({
             </div>
           ) : (
             <section className="practice-exhausted">
-              <h2>You've tried every question on {topic.name}</h2>
+              <h2>
+                {activity !== "mixed" && topic.lanes[lane].length > 0
+                  ? `No unanswered ${modes.find((m) => m[0] === activity)?.[1].toLowerCase()} questions in this selection`
+                  : lane === "new"
+                    ? `No unanswered original questions on ${topic.name}`
+                    : lane === "review"
+                      ? "No missed questions to review"
+                      : "No harder questions ready in this selection"}
+              </h2>
+              {activity !== "mixed" && topic.lanes[lane].length > 0 && (
+                <Button onClick={() => setActivity("mixed")}>
+                  Show other activities
+                </Button>
+              )}
               <p>
-                {topic.total - topic.untested} of {topic.total} answered. Here's
-                what's left for this topic.
+                {topic.total - topic.untested - topic.reserved} of {topic.total}{" "}
+                saved questions answered.{" "}
+                {topic.reserved > 0
+                  ? `${topic.reserved} retry versions are reserved for misses, so they do not appear in New questions.`
+                  : ""}
               </p>
               <div>
                 <span>
-                  Review misses ({topic.lanes.review.length},{" "}
-                  {topic.confidentMisses} you were sure about)
+                  {topic.lanes.review.length} missed{" "}
+                  {topic.lanes.review.length === 1 ? "question" : "questions"}{" "}
+                  to review; {topic.confidentMisses} confident{" "}
+                  {topic.confidentMisses === 1 ? "miss" : "misses"}
                 </span>
                 <Button
                   disabled={!topic.lanes.review.length}
@@ -844,11 +1009,9 @@ export function Practice({
               <div>
                 <span>More questions on this topic</span>
                 <Button
-                  onClick={() =>
-                    (onGenerate ?? onFeedback)(
-                      `Retrieve RabbitHole session ${session.id} and its evidence. Use ValidateSessionQuestions with only new questions and saved conceptIds (no captureIds or full-map rewrite), then SaveValidatedAnalysis with returned saveArguments for normal approval. Add more ${laneNames[lane]} for topic ${topic.name}; preserve existing IDs and validate before saving a rebuild.`,
-                    )
-                  }
+                  onClick={() => {
+                    openRequest(topic.id);
+                  }}
                 >
                   Ask Go
                 </Button>
@@ -859,7 +1022,8 @@ export function Practice({
                 .map((t) => (
                   <div key={t.id}>
                     <span>
-                      Another topic: {t.name} has {t.untested} untested
+                      Another topic: {t.name} has {t.untested} unanswered{" "}
+                      {t.untested === 1 ? "question" : "questions"}
                     </span>
                     <Button
                       onClick={() => {
@@ -1090,7 +1254,7 @@ export function Practice({
                       <strong>{t.name}</strong>
                       <small>
                         {t.total
-                          ? `${t.untested} untested · ${t.confidentMisses} confident misses`
+                          ? `${t.untested} unanswered ${t.untested === 1 ? "question" : "questions"} · ${t.confidentMisses} confident ${t.confidentMisses === 1 ? "miss" : "misses"}`
                           : "No questions yet"}
                       </small>
                     </span>

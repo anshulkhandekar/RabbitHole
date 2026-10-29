@@ -1,3 +1,5 @@
+> Historical checkpoint / audit. For the current build, use the [documentation index](README.md), [status](status.md) and [release checklist](release-checklist.md). Dated results below are not current live sign-off.
+
 # RabbitHole UI redesign verification
 
 This records the earlier design baseline. The [reading-first iteration](reading-first.md) supersedes its default map layout, motion, practice priority and inspector excerpts.

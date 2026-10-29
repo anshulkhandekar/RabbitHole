@@ -1,3 +1,5 @@
+> Historical checkpoint / audit. For the current build, use the [documentation index](README.md), [status](status.md) and [release checklist](release-checklist.md). Dated results below are not current live sign-off.
+
 # Stage 1 checkpoint
 
 Stage 1 closes on October 24, 2026: an implemented, deployed research-to-learning prototype with real Go read/write verification. This is a development milestone, not final competition submission, a production-readiness claim, or a claim that all usability problems are solved. The user has additional major fixes and feature ideas to provide in the next chat.

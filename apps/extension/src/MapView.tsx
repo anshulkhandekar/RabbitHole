@@ -17,6 +17,7 @@ import {
   ViewportPortal,
   MarkerType,
   useNodesInitialized,
+  useUpdateNodeInternals,
   useNodesState,
   type Node,
   type Edge,
@@ -26,6 +27,8 @@ import {
   edgeCrossings,
   mergeEdges,
   layoutIdeas,
+  mapLayoutKey,
+  boundedMapViewport,
   cachedLayoutIdeas,
   connectionGeometry,
   placeLabels,
@@ -220,7 +223,8 @@ function Canvas({
   const analysis = session.analysis!,
     memories = deriveMemory(analysis, session.attempts),
     flow = useReactFlow(),
-    initialized = useNodesInitialized();
+    initialized = useNodesInitialized(),
+    updateNodeInternals = useUpdateNodeInternals();
   const [measuredNodes, , onNodesChange] = useNodesState<Node>(
     analysis.concepts.map((c) => ({
       id: c.id,
@@ -244,7 +248,7 @@ function Canvas({
     [error, setError] = useState(""),
     [hover, setHover] = useState<Selection>(null);
   const box = useRef<HTMLDivElement>(null),
-    layoutKey = `${session.id}:${session.version}`;
+    layoutKey = mapLayoutKey(session);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   useEffect(() => {
     const el = box.current;
@@ -314,6 +318,11 @@ function Canvas({
       alive = false;
     };
   }, [initialized, layoutKey, !!layout, measurementKey]);
+  useEffect(() => {
+    // Controlled node measurements can arrive after React Flow resets its handles.
+    // Re-read the mounted handles after publishing the asynchronous layout.
+    if (layout) updateNodeInternals(layout.nodes.map((n) => n.id));
+  }, [layout, updateNodeInternals]);
   useEffect(() => {
     if (layout && !selected && walk === null) {
       const id = requestAnimationFrame(fit);
@@ -488,6 +497,24 @@ function Canvas({
       }}
     >
       <ReactFlow
+        proOptions={{ hideAttribution: true }}
+        onMoveEnd={(event, viewport) => {
+          if (!event || !layout || !box.current) return;
+          const next = boundedMapViewport(
+            viewport,
+            layout.nodes,
+            box.current.clientWidth,
+            box.current.clientHeight,
+          );
+          if (
+            Math.abs(next.x - viewport.x) > 0.5 ||
+            Math.abs(next.y - viewport.y) > 0.5
+          )
+            void flow.setViewport(next, {
+              duration: Math.min(duration(), 340),
+              ease: (t) => 1 - Math.pow(1 - t, 3),
+            });
+        }}
         onNodesChange={onNodesChange}
         nodes={nodes}
         edges={edges}
@@ -725,7 +752,7 @@ export function MapView({
       ) : (
         <ReactFlowProvider>
           <Canvas
-            key={`${session.id}:${session.version}`}
+            key={mapLayoutKey(session)}
             session={session}
             selected={selected}
             onSelect={onSelect}

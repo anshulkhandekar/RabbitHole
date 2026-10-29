@@ -1,82 +1,47 @@
 # Connect RabbitHole to Go
 
-The application implements one integration transport: MCP Streamable HTTP. Go configuration is manual and is not deployed by committing this repository. School agent-builder access and saving the existing RabbitHole agent instructions were verified in the signed-in browser. The private connector (Pack 74898, released v6) is authenticated and attached. A genuine GetSession → Go generation → approved SaveSessionAnalysis → extension display round trip was verified on October 24, 2026. An exact snapshot of the saved instructions is in `integrations/superhuman/live-agent-instructions.txt`.
+Go calls the authenticated MCP Streamable HTTP endpoint. Git updates do not change the live agent's Instructions or release a connector. The canonical instructions are [agent-instructions.md](../integrations/superhuman/agent-instructions.md); `live-agent-instructions.txt` is a historical snapshot, not proof of the current live field.
 
-## 1. Reachable, authenticated server
+## Backend and identity
 
-Deploy using [deployment.md](deployment.md). Go cannot reach your computer's localhost. The endpoint is `https://YOUR-SERVICE.onrender.com/mcp`; the public `/health` endpoint contains no research. All research/API/MCP requests require `Authorization: Bearer YOUR_PERSONAL_TOKEN`.
+Deploy a reachable HTTPS service using [deployment](deployment.md). Go cannot access your localhost. All research/API/MCP access requires a personal bearer token; `/health` is public and contains no research. Configure the extension and Go with tokens for the same owner. Session IDs alone never authorize access.
 
-Generate a 32-byte random token using `npm run setup:local`, or the command in `.env.example`. The Render Blueprint can generate `RABBITHOLE_TOKEN` server-side for one owner. Use that generated token to connect the extension and Go. For multiple owners, set `RABBITHOLE_USERS` in the host environment to a JSON array of owner/token pairs. Use a distinct token for every person. Do not put tokens in source, screenshots, video, a shared agent prompt, or URLs. The server derives ownership from the token; knowing a session ID is insufficient. Revoking a user means removing/rotating their token and restarting the backend.
+`npm run setup:local` creates ignored local credentials if absent. The Render Blueprint can generate a single-owner token server-side; multiple owners use RABBITHOLE_USERS as described in `.env.example`. Never put a token in a URL, shared prompt, screenshot or recording. Revocation means rotating/removing the token and restarting the backend.
 
-## 2. Create the connector
+## Connector — schema 8
 
-Following the [official MCP guide](https://coda.io/packs/build/latest/guides/blocks/mcp/):
+1. Follow the [official MCP guide](https://coda.io/packs/build/latest/guides/blocks/mcp/) to create an MCP connector in the appropriate workspace.
+2. Use [pack.ts](../integrations/superhuman/pack.ts), which declares the network domain and per-user HeaderBearerToken authentication. Its configured endpoint is `/mcp?schema=8` on the RabbitHole service. For another deployment, update the domain and origin together.
+3. Build/release the connector and attach its account connection to the agent. Enter the personal token in the connection dialog. Installation and sharing depend on workspace rights.
+4. Confirm six tools: ListSessions, GetSession, ValidateSessionAnalysis, ValidateSessionQuestions, SaveValidatedAnalysis and legacy SaveSessionAnalysis. Read tools advertise readOnlyHint true. Both save tools advertise false. Keep **Write: Always ask**; Read may be Always allow.
 
-1. Open the Packs page in your Superhuman Docs workspace.
-2. Select **Create an MCP Connector** and enter your hosted `/mcp` URL.
-3. Static bearer authentication was not discovered automatically in the live wizard. Use the validated [pack.ts](../integrations/superhuman/pack.ts) source, which declares per-user `HeaderBearerToken` and the backend network domain. Build and release the connector, then enter the personal token in its account connection dialog, never a URL parameter.
-4. Create the connector, release it, and add the connection to your Go agent. Installation/sharing rights depend on your workspace. Later connector code changes need their own build and release. The server's runtime tool list is retrieved through MCP. Go was observed retaining the older parameter schema after a backend update, even in a fresh chat and after a connector-only rebuild. The v6 connector uses `/mcp?schema=4` to obtain fresh discovery from the same authenticated endpoint. Bump the schema revision when making tool-contract changes, build/release, and verify the actual fields in a fresh Go chat.
-5. Confirm tools: `ListSessions`, `GetSession`, `ValidateSessionAnalysis`, `SaveValidatedAnalysis`, `SaveSessionAnalysis`. The three read tools advertise `readOnlyHint: true`; both save tools advertise `false` and should require confirmation. Do not change that annotation to bypass approval.
+Schema revision is a discovery-cache key, not authentication. Bump it only when changing the tool contract, then verify actual discovery in a fresh chat. The current changes keep schema 8 and need **no new connector release** if schema 8 is already installed. Backend changes still require deployment.
 
-The released connector was also validated locally with `npx coda validate integrations/superhuman/pack.ts`. The official `@codahq/packs-sdk` is a development dependency; the production server uses the official MCP SDK. For this private connector, the documented setup route is `https://docs.superhuman.com/go/agent/setup/74898`. After connecting, search RabbitHole in the agent builder’s Add connections dialog. Read approval is Always allow; Write approval remains Always ask.
+The definition can be checked locally with `npx coda validate integrations/superhuman/pack.ts`. The Packs SDK is a development dependency; the production endpoint uses the MCP SDK.
 
-## 3. Configure the agent
+## Agent and extension
 
-Name: **RabbitHole**
+Name the agent RabbitHole. Copy its description separately, then the Instructions text after the divider in [agent-instructions.md](../integrations/superhuman/agent-instructions.md). Attach the connector and save. Use this checkout (`rabbitv4-2`), not a sibling worktree or the historical live snapshot. No automatic trigger is required for the demonstrated manual flow.
 
-Description and paste-ready instructions: [agent-instructions.md](../integrations/superhuman/agent-instructions.md). Copy the description separately, then the instructions after the divider. Attach the RabbitHole connector under Tools and Access. Save. No automatic trigger is required for manual chat use.
+In extension Settings enter the backend origin, owner token and actual saved agent/chat URL copied from Go. Do not invent a prompt query parameter or use the builder settings URL as a chat link.
 
-In extension Settings, enter your backend URL, your own token, and the real saved Go agent URL copied from the address bar. The verified current account chat URL is `https://go.superhuman.com/agents/72133`; its builder URL is a separate settings page. No invented prompt URL parameter is used.
+## Prove the round trip
 
-## 4. Prove the first round trip
+1. Capture public sources and wait for backend sync to finish. Send a batch with at least thirteen finds to exercise pagination.
+2. Click Send to Go, paste/send the copied prompt and observe actual GetSession calls. GetSession returns up to twelve captures per page with stable short refs and processingDefaults. Go follows every nextOffset; twelve is not a run limit. New arrivals after submission remain pending.
+3. Go reads the existing guide, creates the complete replacement and calls read-only ValidateSessionAnalysis. A question-only top-up uses ValidateSessionQuestions with new questions and saved concept IDs; source inheritance happens server-side.
+4. Correct invalid evidence before approval. Exact-quote failures may include bounded same-source evidenceRepairs. Go must choose supporting text, preserve the complete guide and resubmit a corrected preflight. Instructions allow two corrected checks after the initial failure. Never automatically replace quotes or relax validation.
+5. After successful validation, Go copies saveArguments verbatim into SaveValidatedAnalysis and requests normal approval. Check session identity and title on the card. The saved version and pending count are the receipt.
+6. Verify the extension observes the newer version, displays the guide and reports remaining finds honestly. Re-read/export the saved analysis when diagnosing a mismatch. Inspect actual question quality and evidence relevance; automated validation does not establish them.
 
-1. Install the extension, configure it, start on a real research tab, and capture one source. Wait for the synced status.
-2. Click Send to Go. The extension attempts to copy a session-specific prompt and opens the configured URL. Send/paste the prompt in the agent chat.
-3. Observe a real GetSession call and source content, generation in Go, then a successful read-only ValidateSessionAnalysis before SaveValidatedAnalysis. Validation returns short saveArguments referencing the exact guide, avoiding a second large payload. Approve the write if prompted. The tool must return a version and pending count.
-4. Return to the extension; it automatically polls for the saved analysis. Verify the exact saved title, concepts, and evidence are displayed. Export JSON and compare its `analysis` to the actual tool call when debugging.
-5. Record the run date, agent link, write approval behavior, and result in status.md. Only then mark Gate A live-verified.
+“Do not retype the guide” applies to saving the validated draft by reference. Corrected ValidateSessionAnalysis calls still need the complete guide. An unchanged failed write must not be repeated. Stale versions require reading/merging the current guide, then fresh validation.
 
-The redesigned flow is Send to Go, paste, Send, then Approve if Go requests a write. Navigation/authentication may add actions. The extension then observes the saved version automatically. This handoff and polling were tested with a synthetic destination and saved fixture; the earlier live account test used the previous six-action UI (Sync, Open in Go, paste, Send, Approve, Sync). Opening Go never means reasoning has started.
+Drafts are owner/session-bound, capped at 32 entries and expire after thirty minutes. Restart/eviction requires revalidation. Preflight never marks finds processed. Approval rechecks atomically; replay returns the prior receipt. Hidden/deleted evidence cannot support new questions. Legacy saves remain available for older clients.
 
-## 5. Scheduling later
+## Limits and troubleshooting
 
-The official builder lists Scheduled, While writing, Email received/sent, and Slack mentioned/message triggers. Manual chat is an invocation path, not a configurable event trigger. First prove the manual loop. Then configure an available schedule in your account, test one pending batch, and record cadence, approvals, completion timestamp, and duplicate/no-op behavior. No cadence or unattended write behavior is assumed. Do not enable Slack by default.
+Search-only trails support interests and gaps, not invented factual teaching. Capture a substantive article or highlight to support a learning guide. Inferred connections must remain labelled.
 
-MCP Apps are documented only in Go's web client. They are unnecessary here. This project has no direct Go invocation API, inbound webhook, internal endpoint, or browser-click automation workaround.
+If tools or fields are absent, check the deployed backend and attached schema 8 connector before changing prompts. Updating Instructions alone cannot add tools. If a save fails, inspect its actionable error and current version rather than approving repeated unchanged writes. A waiting state cannot observe Go's chat errors directly; Check Go directs the user back after a stall.
 
-Live scheduling inspection: Custom exposes interval 1–30 with Hour/Day/Week/Month units. No minute unit was present. No schedule was saved; write confirmation and completion remain untested for scheduled runs. Manual chat is the verified workflow.
-
-## Rebuild schema troubleshooting
-
-If Go reports that `intent` is unavailable or a rebuild fails with “No new captures,” do not invent captures or remove the backend guard. Check that the installed connector uses the current release and open a fresh RabbitHole chat. A read-only schema diagnostic should expose top-level `intent` and `overview`, concept `parentId`/`evidence`, and matching `pairs`. Merely updating agent instructions or releasing identical connector code did not refresh the old schema in the observed run. The schema revision is not a credential; bearer authentication and Always ask for writes remain required.
-
-Quote validation reports every invalid evidence path with item and capture IDs, without echoing source text. Fix only those excerpts after re-reading their captures, retain the rest of the complete guide, and retry against the current saved version. Validation failures remain atomic; they do not partially replace an existing guide.
-
-## October 25 save-loop repair
-
-Backend commits `392515e` and `db360f1` implement the repair. Private connector release 6 uses discovery revision 4, and the live agent instructions now require read-only preflight before write approval. Invalid IDs name the offending values; quotation validation still requires exact captured text. No validation guard or write confirmation was removed. Live discovery showed ValidateSessionAnalysis enabled under Read, with Write still Always ask. An existing conversation was resumed for preflight verification; see the v2 verification log for its final outcome.
-
-The final handoff caches at most 32 validated guide drafts in process memory for 30 minutes. Preflight leaves sessions and processed markers unchanged. SaveValidatedAnalysis accepts the returned sessionId, validationId and title, requires normal write approval, checks the owner, and reruns the atomic save validation. Replaying the same saved reference returns its prior receipt rather than incrementing the version twice. Restarted, expired or evicted drafts require revalidation. Legacy full-payload SaveSessionAnalysis remains available for existing clients.
-
-## October 27 save-loop and capture repair — discovery revision 8
-
-This supersedes the older 24-capture and six-capture invocation guidance above. GetSession now defaults to a twelve-capture page and returns a stable short `ref` for each capture plus `processingDefaults` with the current expectedVersion and the page's pending refs. Go can use these refs in `captureIds`, `evidence[].captureId` and `processedCaptureIds`; the server resolves them to canonical IDs before validation and caching. Existing UUID-based clients and saved data remain valid. Unknown references are rejected, not guessed or silently corrected. Hidden/deleted-source checks, exact quotations, ownership, version checks and write approval still apply.
-
-The extension records all currently pending finds in its handoff. Go must follow every nextOffset page in the same invocation and merge relationships across the whole inspected trail before saving. The twelve-capture read page is a transport boundary, not a processing cap. Finds arriving after Send to Go remain pending for the next request. The updated agent instructions describe search-only trails as interests and evidence gaps, without inventing factual explanations or quiz answers. Search queries are valid inspected captures; an empty `processedCaptureIds` array is not evidence that searches are unsupported. When pending captures exist, that omission now produces an explicit correction message. Unknown evidence references identify their exact item paths and available short refs.
-
-Manual update order:
-
-1. Deploy the updated backend from this checkout to Render. The changes are local until you commit/push/deploy them; rebuilding the connector alone does not deploy backend code. No database migration or token rotation is required.
-2. Copy `integrations/superhuman/pack.ts` into the connector source, build it and publish a new release. Its endpoint is `https://rabbithole-1c5e.onrender.com/mcp?schema=8`. Refresh the agent's attached connection if necessary. Read remains Always allow and Write remains Always ask.
-3. Replace the Go agent Instructions field with the text after the divider in `integrations/superhuman/agent-instructions.md`, then save. `live-agent-instructions.txt` is a record of the previous manual state; it was deliberately not rewritten to pretend these instructions are already live.
-4. Reload RabbitHole at `chrome://extensions`, reopen its workspace/panel, and refresh research tabs.
-5. Cancel any old Waiting for Go handoff, then Send to Go again in the linked agent conversation. Cancel only clears the handoff receipt; it does not remove finds. Existing sessions can be reused.
-
-Live acceptance test:
-
-- Ask GetSession for the intended session. Confirm `captures[].ref`, `processingDefaults`, the current version, and up to twelve captures per read, following nextOffset when present. If these are absent, stop: the backend/connector is still stale.
-- Send a trail with more than twelve pending finds to exercise pagination. Go must use the supplied refs, validate successfully, request normal SaveValidatedAnalysis approval, and report the returned saved version and remaining pending count. Approve only the intended write.
-- For a query-only batch, expect an interest-and-gap map, not fabricated factual teaching. All inspected query refs must be included in `processedCaptureIds`. For a substantive learning guide, revisit an article or select a passage in an included research tab and send the new material.
-- Return to RabbitHole: the waiting state should end, all submitted finds' new dots should clear, and finds captured after submission should remain new.
-
-Local automated verification covers canonical/ref round trips through the authenticated MCP client, stable refs across deletion/paging, hidden-source protection, actionable typo/omission errors, honest search-only maps, and whole-trail handoff completion, AI Overview and article-link capture, trusted highlighting and shared preferences. A real Go run after these manual deployment steps is still required; local tests do not prove the agent will follow the updated instructions.
+The public builder offers several trigger types and describes beta availability. No supported authenticated extension-to-Go invocation path has been verified here. Scheduling cadence and unattended approval behaviour are not release claims. See [platform findings](platform-findings.md) and the [live checklist](release-checklist.md).

@@ -18,14 +18,14 @@ npm run test:stage3
 npm run test:release
 ```
 
-The current check command runs 87 unit tests, TypeScript and the production build. `test:release` also runs formatting and all three isolated browser suites. Browser harnesses need Playwright Chromium or an explicit executable path. On this Mac the previously verified invocation is:
+The check command runs all `tests/*.test.ts`, TypeScript and the production build. The dated count belongs in [status](status.md). `test:release` also runs formatting, both browser fixtures, Stage 3 and actual extension reload (four browser scripts). Browser harnesses need Playwright Chromium or an explicit executable path. On this Mac the previously verified invocation is:
 
 ```sh
 CHROMIUM_PATH='/Users/anshulkhandekar/Library/Caches/ms-playwright/chromium-1223/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing' npm run test:browser
 CHROMIUM_PATH='/Users/anshulkhandekar/Library/Caches/ms-playwright/chromium-1223/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing' npm run test:reload
 ```
 
-That path is machine-specific and may change when browsers are updated. Both harnesses use disposable profiles. The main browser harness runs a temporary authenticated backend and synthetic pages/analysis, and recreates screenshots in ignored `test-results/`. It cannot establish live generation quality. `test:reload` checks actual runtime invalidation, not the user's native extension reload-and-refresh experience. No real research session should be used as a disposable fixture.
+That path is machine-specific and may change when browsers are updated. All browser harnesses use disposable profiles. The main browser harness runs a temporary authenticated backend and synthetic pages/analysis, and recreates screenshots in ignored `test-results/`. It cannot establish live generation quality. `test:reload` checks actual runtime invalidation, not the user's native extension reload-and-refresh experience. No real research session should be used as a disposable fixture.
 
 Dependency review: `npm audit --omit=dev` covers the production dependency tree; full `npm audit` also includes the Packs SDK toolchain. Record actual results, distinguish production and development findings, and review changes rather than applying an unrelated forced dependency upgrade.
 
@@ -50,3 +50,7 @@ Generated `test-results/`, `playwright-report/`, old account/deployment screensh
 Clean only named generated directories; do not run a broad `git clean -fdx`, remove all PNGs recursively, or delete browser profiles/data. Do not clean the original brief/design references outside the repository. Screenshot removal from the current checkout does not purge past Git history; do not rewrite history without a separate reason and authorization.
 
 The Stage 1 milestone uses the annotated `stage-1-complete` tag. It marks the documented baseline, not public publication or competition completion. Repository visibility and project-license decisions remain unchanged.
+
+## October 29 dependency review
+
+The production-only audit reports zero known vulnerabilities. The full audit reports seven development-toolchain findings: two high, one moderate and four low, including the Packs SDK dependency tree. The reported SDK remedy is a major-version downgrade, not a tested drop-in update. No forced dependency change was made. These development tools are not bundled into the production server; that boundary does not remove the need to review them. Counts are dated, not a permanent security guarantee.

@@ -1,3 +1,5 @@
+> Historical checkpoint / audit. For the current build, use the [documentation index](README.md), [status](status.md) and [release checklist](release-checklist.md). Dated results below are not current live sign-off.
+
 # Stage 3 test build
 
 This workspace contains Claude's Stage 3 features plus the independently reviewed fixes. Use the build from **`rabbitv4-2/dist/extension`**, not the older sibling `rabbitv4/dist/extension`.

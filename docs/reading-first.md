@@ -1,3 +1,5 @@
+> Historical checkpoint / audit. For the current build, use the [documentation index](README.md), [status](status.md) and [release checklist](release-checklist.md). Dated results below are not current live sign-off.
+
 # Reading first iteration
 
 This iteration follows hands-on feedback: capture worked, but watching the trail competed with reading; the map did not provide a starting point; explanations were brief; source disclosures closed on background updates; and self-assessment was not the preferred review flow.

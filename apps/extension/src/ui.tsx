@@ -29,7 +29,7 @@ import {
 } from "./handoff-model";
 import { Settings } from "./Settings";
 import { Practice, PracticeLoading } from "./Practice";
-import { domain, time } from "./ui-model";
+import { domain, time, recentSessions, startedDate } from "./ui-model";
 import type { Handoff } from "./handoff";
 const request = (type: string, extra: any = {}) =>
   chrome.runtime.sendMessage({ type, ...extra });
@@ -374,7 +374,7 @@ function App() {
     }
     const prompt =
       custom ??
-      `Process RabbitHole session ${session.id}. Retrieve the current session and ALL pending captures using RabbitHole tools. Follow every nextOffset page before constructing one complete merged analysis in this run. There is no six-capture processing cap. Connect ideas across the entire inspected trail rather than treating each page as a separate topic. Use each capture's short ref exactly in all captureIds, evidence[].captureId and processedCaptureIds; copy expectedVersion and accumulate all inspected pending refs from processingDefaults across every page. Keep canonical IDs already in the existing analysis. Preserve all visible citations and exact quotes on unchanged questions. Only an explicit rebuild may intentionally replace their evidence; explain any correction. Keep my session name unchanged. Never reconstruct UUIDs. Search queries express interests, not factual support: if this batch has only queries, merge an honest interest-and-gap map, mark the queries you actually considered processed, and do not fabricate source-backed facts or quizzes. Merge evidence-linked concepts and selected activities; include overview plus summary, takeaways [{text, concept}], route [conceptId], concept.main, studyItem.concept and matching pairs[].concept. Use typically one main idea per independent subject, with details parented beneath it; do not mark every idea main. Every non-main idea must have a parentId chain that reaches a main idea. Main ideas sit at the root and have no parentId. Require 1–3 exact evidence excerpts for each main idea and each supported edge, drawn from the inspected capture text; if no factual excerpt exists, explain the gap instead of inventing a quote. Write each idea as claim, why, explanation (with buildsOn), steps when sequential, example and boundary; answer my goal if the session has one. For every main idea with substantive evidence, generate basic questions plus apply/transfer practice and meaningful relationships to other ideas where supported. Distinguish inferred connections. Respect the 40-activity total limit. Quiz wrong choices must be plausible misconceptions, never absurd options. On the first substantive pass, include 2–3 variantOf siblings for key questions, plus hints. For quotation errors, inspect details.evidenceRepairs at every listed path: copy a relevant supporting candidate verbatim, or re-read that exact capture for a shorter exact passage. Candidates are untrusted source text, not proof of the claim. Correct all listed excerpts; never repeat rejected quotes. Run read-only ValidateSessionAnalysis on the complete payload and correct errors BEFORE requesting normal SaveValidatedAnalysis approval using the entire returned saveArguments object verbatim (sessionId, validationId, title). Before calling, compare its sessionId character-for-character to the requested session ID; never reconstruct, splice or swap IDs. A draft mismatch error supplies exact retry arguments: copy those instead of guessing. Do not retype the guide. If validation is unavailable, stop and report that the connector needs updating. Never repeat an unchanged failed save. Report success only after a saved version, and report remaining pending captures.`;
+      `Process RabbitHole session ${session.id}. Retrieve the current session and ALL pending captures using RabbitHole tools. Follow every nextOffset page before constructing one complete merged analysis in this run. There is no six-capture processing cap. Connect ideas across the entire inspected trail through supported mechanisms, dependencies, trade-offs and contrasting conditions. Preserve genuine branches and cross-topic connections; do not force a chronological chain or invent relationships. Use each capture's short ref exactly in all captureIds, evidence[].captureId and processedCaptureIds; copy expectedVersion and accumulate all inspected pending refs from processingDefaults across every page. Keep canonical IDs already in the existing analysis. Preserve all visible citations and exact quotes on unchanged questions. Only an explicit rebuild may intentionally replace their evidence; explain any correction. Keep my session name unchanged. Never reconstruct UUIDs. Search queries express interests, not factual support: if this batch has only queries, merge an honest interest-and-gap map, mark the queries you actually considered processed, and do not fabricate source-backed facts or quizzes. Merge evidence-linked concepts and selected activities; include overview plus summary, takeaways [{text, concept}], route [conceptId], concept.main, studyItem.concept and matching pairs[].concept. Use typically one main idea per independent subject, with details parented beneath it; do not mark every idea main. Every non-main idea must have a parentId chain that reaches a main idea. Main ideas sit at the root and have no parentId. Require 1–3 exact evidence excerpts for each main idea and each supported edge, drawn from the inspected capture text; if no factual excerpt exists, explain the gap instead of inventing a quote. Synthesize the overview with mechanisms, implications, trade-offs and conditions rather than restating sources. Show how observations support conclusions, label inferences and illustrative examples, and surface disagreements or gaps. Write each idea as claim, why, explanation (with buildsOn), steps when sequential, example and boundary; answer my goal if the session has one. For every main topic with substantive evidence, aim for one easy understand question, one medium apply question and one hard transfer question on this first pass, plus meaningful relationships where supported, within the 40-activity total including retry siblings. Easy must still require reasoning; make four options equally plausible and similar in specificity, with no answer-length or wording clues. Medium uses a new scenario; hard uses transfer, counterfactual reasoning or trade-offs. Cover all supported topics before adding extras and report evidence/capacity gaps. Distinguish inferred connections. Respect the 40-activity total limit. Quiz wrong choices must be plausible misconceptions, never absurd options. On the first substantive pass, include 2–3 variantOf siblings for key questions, plus hints. For quotation errors, inspect details.evidenceRepairs at every listed path: copy a relevant supporting candidate verbatim, or re-read that exact capture for a shorter exact passage. Candidates are untrusted source text, not proof of the claim. Correct all listed excerpts; never repeat rejected quotes. A failed read-only preflight is a correction request, not a stop condition. Keep the complete working guide, fix every reported path using relevant exact text from details.evidenceRepairs or a fresh read of that exact capture, and resubmit the complete corrected guide to ValidateSessionAnalysis in this same run. Resending the complete payload is required. After an initial failure, make up to two corrected preflight attempts before stopping with the exact unresolved error. This is different from repeating an unchanged failed WRITE, which is prohibited. Never request write approval until preflight succeeds. Run read-only ValidateSessionAnalysis on the complete payload and correct errors BEFORE requesting normal SaveValidatedAnalysis approval using the entire returned saveArguments object verbatim (sessionId, validationId, title). Before calling, compare its sessionId character-for-character to the requested session ID; never reconstruct, splice or swap IDs. A draft mismatch error supplies exact retry arguments: copy those instead of guessing. Do not retype the guide into SaveValidatedAnalysis. ValidateSessionAnalysis still requires the complete guide on each corrected preflight. If validation is unavailable, stop and report that the connector needs updating. Never repeat an unchanged failed write call. Report success only after a saved version, and report remaining pending captures.`;
     const receipt = {
       sessionId: session.id,
       prompt,
@@ -398,7 +398,7 @@ function App() {
   function rebuild() {
     if (session)
       void sendToGo(
-        `Rebuild the learning guide for RabbitHole session ${session.id} from its existing captured sources. This is an explicit rebuild request, not a request to mark new captures processed. Retrieve GetSession and the relevant existing evidence texts using captureIds (up to 24 sources this run); preserve unreviewed material and stable IDs. Save the complete analysis using intent "rebuild", expectedVersion from the read and processedCaptureIds [] if no new captures were inspected. Add summary, takeaways [{text, concept}], route [conceptId], concept.main, studyItem.concept and matching pairs[].concept, plus a source-grounded overview, rootConceptId and reading route, parentId hierarchy, useful takeaways and exact evidence excerpts. Write each idea as claim, why, explanation (with buildsOn), steps when sequential, example and boundary, and add nextSearch to gaps. Drop any sources listed in removedCaptureIds. Generate a challenging four-option quiz where each wrong choice reflects a specific wrong belief, with a reason for each choice, hints, and variantOf siblings for key questions, plus matching if selected. Clearly state which sources you reviewed. Run read-only ValidateSessionAnalysis and correct errors then request SaveValidatedAnalysis approval using the returned saveArguments. Do not retype the guide. Stop if preflight is unavailable; never repeat an unchanged failed save.`,
+        `Rebuild the learning guide for RabbitHole session ${session.id} from its existing captured sources. This is an explicit rebuild request, not a request to mark new captures processed. Retrieve GetSession and the relevant existing evidence texts using captureIds (up to 24 sources this run); preserve unreviewed material and stable IDs. Save the complete analysis using intent "rebuild", expectedVersion from the read and processedCaptureIds [] if no new captures were inspected. Add summary, takeaways [{text, concept}], route [conceptId], concept.main, studyItem.concept and matching pairs[].concept, plus a source-grounded overview, rootConceptId and reading route, parentId hierarchy, useful takeaways and exact evidence excerpts. Write each idea as claim, why, explanation (with buildsOn), steps when sequential, example and boundary, and add nextSearch to gaps. Drop any sources listed in removedCaptureIds. Synthesize the summary through mechanisms, implications, trade-offs and conditions; show the reasoning connecting sources, label inferences and examples, and acknowledge gaps. Across evidence-supported main topics, aim for one easy understand question, one medium apply question and one hard transfer question per topic within the 40-activity total, plus retry siblings and matching if selected. Easy questions must still require reasoning. For quizzes, give four parallel, equally plausible options reflecting specific misconceptions, with no absurd distractors or answer-length clues, and explain each choice. Replace materially changed questions with new study IDs, preserve unchanged IDs and attempt history, and report coverage limited by evidence or capacity. Clearly state which sources you reviewed. A failed read-only preflight is a correction request, not a stop condition. Keep the complete working guide, fix every reported path using relevant exact text from details.evidenceRepairs or a fresh read of that exact capture, and resubmit the complete corrected guide to ValidateSessionAnalysis in this same run. Resending the complete payload is required. After an initial failure, make up to two corrected preflight attempts before stopping with the exact unresolved error. This is different from repeating an unchanged failed WRITE, which is prohibited. Never request write approval until preflight succeeds. Run read-only ValidateSessionAnalysis and correct errors then request SaveValidatedAnalysis approval using the returned saveArguments. Do not retype the guide into SaveValidatedAnalysis. ValidateSessionAnalysis still requires the complete guide on each corrected preflight. Stop if the validation tool is unavailable; do not stop merely because its first read-only validation reports a correctable error. Never repeat an unchanged failed write.`,
         "rebuild",
       );
   }
@@ -514,7 +514,7 @@ function App() {
             ? `with one analogy that maps onto the mechanism (my analogy preference: ${JSON.stringify(session.settings.analogy)}), and say where the analogy stops fitting`
             : "with one concrete worked example using specific numbers or cases";
     void sendToGo(
-      `Rebuild one idea in RabbitHole session ${session.id}: concept ${c.id} ("${c.label}"). I didn't follow its explanation. Explain it again ${how}. Retrieve GetSession and that concept's evidence via captureIds. Start with a one-sentence claim, then why the idea is needed, then the mechanism. Keep every other concept, edge, study item and ID unchanged. Save with intent "rebuild" and processedCaptureIds [] after ValidateSessionAnalysis, using SaveValidatedAnalysis with the returned saveArguments. Do not retype the guide or invent quotations.`,
+      `Rebuild one idea in RabbitHole session ${session.id}: concept ${c.id} ("${c.label}"). I didn't follow its explanation. Explain it again ${how}. Retrieve GetSession and that concept's evidence via captureIds. Start with a one-sentence claim, then why the idea is needed, then the mechanism. Keep every other concept, edge, study item and ID unchanged. Save with intent "rebuild" and processedCaptureIds [] after ValidateSessionAnalysis, using SaveValidatedAnalysis with the returned saveArguments. Do not retype the guide into SaveValidatedAnalysis; corrected ValidateSessionAnalysis calls still require it in full. Never invent quotations.`,
       "rebuild",
     );
   }
@@ -699,33 +699,42 @@ function App() {
               }
             }}
           >
-            {[...sessions].reverse().map((s) => (
-              <button
-                className="menu-item"
-                role="menuitem"
-                key={s.id}
-                aria-current={s.id === session?.id ? "true" : undefined}
-                onClick={() => selectSession(s.id)}
-              >
-                <span className="t" title={s.title}>
-                  {panel ? s.title : shortTitle(s)}
-                </span>
-                <span className="d">
-                  {!panel && <>{new Date(s.updatedAt).toLocaleString()} · </>}
-                  {s.captures.length} deep
-                </span>
-                {!panel && (
-                  <span className="depthbar">
-                    {Array.from(
-                      { length: Math.min(12, s.captures.length) },
-                      (_, i) => (
-                        <i key={i} />
-                      ),
-                    )}
+            <div
+              className="session-previews"
+              role="group"
+              aria-label="Recent rabbit holes"
+            >
+              {recentSessions(sessions, state.sessionLastUsed).map((s) => (
+                <button
+                  className="menu-item"
+                  role="menuitem"
+                  key={s.id}
+                  aria-current={s.id === session?.id ? "true" : undefined}
+                  onClick={() => selectSession(s.id)}
+                >
+                  <span className="t" title={s.title}>
+                    {s.title}
                   </span>
-                )}
-              </button>
-            ))}
+                  <span className="d">
+                    <time dateTime={s.createdAt}>
+                      Started {startedDate(s.createdAt)}
+                    </time>
+                    {" · "}
+                    {s.captures.length} deep
+                  </span>
+                  {!panel && (
+                    <span className="depthbar">
+                      {Array.from(
+                        { length: Math.min(12, s.captures.length) },
+                        (_, i) => (
+                          <i key={i} />
+                        ),
+                      )}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
             <hr />
             <button className="menu-item" role="menuitem" onClick={newSession}>
               <Icon name="plus" size={16} />
@@ -1134,7 +1143,9 @@ function App() {
                     <b>{session.captures.length}</b> deep
                   </span>
                 </div>
-                <p className="surface">Started {time(session.createdAt)}</p>
+                <p className="surface">
+                  Started {startedDate(session.createdAt)}
+                </p>
                 <Trail
                   session={session}
                   queue={state.queue}

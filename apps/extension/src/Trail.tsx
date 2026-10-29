@@ -130,8 +130,11 @@ export function SourceQuote({
         <p>No excerpt saved — Rebuild with Go to add quotes.</p>
       )}
       {excerpt && capture.text !== excerpt && (
-        <details>
-          <summary>Read captured text</summary>
+        <details className="capture-details">
+          <summary>
+            <Icon name="chevronDown" size={16} />
+            <span>Read captured text</span>
+          </summary>
           <div className="quoted-text">{capture.text}</div>
         </details>
       )}
@@ -272,7 +275,10 @@ export function Trail({
               )}
               {wide && c.sourceType !== "highlight" && (
                 <details className="capture-details">
-                  <summary>Read captured text</summary>
+                  <summary>
+                    <Icon name="chevronDown" size={16} />
+                    <span>Read captured text</span>
+                  </summary>
                   <blockquote className="source-quote quoted-text">
                     {c.text}
                   </blockquote>
