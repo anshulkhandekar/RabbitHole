@@ -153,6 +153,43 @@ function startContext(tab?: chrome.tabs.Tab) {
     url?.searchParams.has("workspace");
   return { regular, canStart: !!tab?.id && (regular || !!workspace) };
 }
+async function includeTab(s: Local, tab?: chrome.tabs.Tab) {
+  if (!tab?.id || !s.active || tab.incognito || !/^https?:/.test(tab.url ?? ""))
+    throw new Error("Open a research webpage first");
+  s.tabs[tab.id] = s.active;
+  s.searchSession = s.active;
+  if (s.dismissed[s.active]) delete s.dismissed[s.active][tab.url!];
+  await persist(s);
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    files: ["content.js"],
+  });
+  await chrome.tabs
+    .sendMessage(tab.id, { type: "reading-update", rescan: true })
+    .catch(() => {});
+}
+async function updateResumedTab(s: Local, tab?: chrome.tabs.Tab) {
+  if (
+    tab?.id === undefined ||
+    tab.incognito ||
+    !/^https?:/.test(tab.url ?? "") ||
+    isExcluded(s.excluded[s.active ?? ""], tab.url!)
+  )
+    return;
+  await persist(s);
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    files: ["content.js"],
+  });
+  await chrome.tabs
+    .sendMessage(tab.id, {
+      type: "reading-update",
+      rescan: true,
+      promptInclude: s.tabs[tab.id] !== s.active,
+      sessionId: s.active,
+    })
+    .catch(() => {});
+}
 function enrollSearch(s: Local, tab?: chrome.tabs.Tab) {
   const session = s.active ? s.sessions[s.active] : undefined;
   if (
@@ -525,7 +562,7 @@ async function capture(
     session.title = parsed.text.slice(0, 140);
   enqueue(s, "POST", `/api/sessions/${session.id}/captures`, parsed);
   await persist(s);
-  return { saved: true };
+  return { saved: true, captureId: parsed.id };
 }
 async function handle(msg: any, sender: chrome.runtime.MessageSender) {
   return transact(async (s) => {
@@ -621,6 +658,7 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
         enqueue(s, "PATCH", `/api/sessions/${session.id}`, {
           status: session.status,
         });
+        if (msg.control === "resume") await updateResumedTab(s, sender.tab);
       } else throw new Error("Unknown reading control");
       await flush(s);
       return { saved: true };
@@ -710,6 +748,48 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       if (msg.automatic && !s.sessions[s.active ?? ""]?.settings.autoHighlights)
         return { ignored: true };
       return capture(s, msg.capture, sender.tab.id, !!msg.automatic);
+    }
+    if (msg.type === "reading-undo") {
+      const session = s.sessions[msg.sessionId],
+        tab = sender.tab,
+        c = session?.captures.find((c) => c.id === msg.captureId);
+      if (
+        sender.id !== chrome.runtime.id ||
+        sender.frameId !== 0 ||
+        !tab?.id ||
+        tab.incognito ||
+        !/^https?:/.test(tab.url ?? "") ||
+        sender.url !== tab.url ||
+        msg.sessionId !== s.active ||
+        s.tabs[tab.id] !== msg.sessionId ||
+        !session
+      )
+        throw new Error("This page is not in the active session");
+      if (!c && session.removed?.includes(msg.captureId))
+        return { removed: true };
+      if (!c || c.sourceType !== "article" || c.url !== sender.url)
+        throw new Error("Only this page's saved article can be undone here");
+      await removeCapture(s, session, c.id);
+      await persist(s);
+      await flush(s);
+      return { removed: true };
+    }
+    if (msg.type === "reading-include") {
+      if (
+        sender.id !== chrome.runtime.id ||
+        sender.frameId !== 0 ||
+        sender.url !== sender.tab?.url ||
+        msg.sessionId !== s.active ||
+        s.sessions[s.active ?? ""]?.status !== "active"
+      )
+        throw new Error("This page is not in the active session");
+      if (isExcluded(s.excluded[s.active!], sender.url ?? ""))
+        throw new Error(
+          "This page is excluded; unexclude it in RabbitHole first",
+        );
+      await includeTab(s, sender.tab);
+      await flush(s);
+      return { saved: true };
     }
     if (!internal)
       throw new Error("This operation is available only in RabbitHole");
@@ -933,24 +1013,7 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
         active: true,
         lastFocusedWindow: true,
       });
-      if (
-        !tab?.id ||
-        !s.active ||
-        tab.incognito ||
-        !/^https?:/.test(tab.url ?? "")
-      )
-        throw new Error("Open a research webpage first");
-      s.tabs[tab.id] = s.active;
-      s.searchSession = s.active;
-      if (s.dismissed[s.active]) delete s.dismissed[s.active][tab.url!];
-      await persist(s);
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: ["content.js"],
-      });
-      await chrome.tabs
-        .sendMessage(tab.id, { type: "reading-update", rescan: true })
-        .catch(() => {});
+      await includeTab(s, tab);
     }
     if (msg.type === "select") {
       if (s.active && s.active !== msg.id) {
@@ -963,8 +1026,17 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
     if (msg.type === "patch") {
       const session = s.sessions[msg.id];
       if (!session) throw new Error("Session missing");
+      const resuming =
+        session.status !== "active" && msg.patch.status === "active";
       Object.assign(session, msg.patch);
       enqueue(s, "PATCH", `/api/sessions/${msg.id}`, msg.patch);
+      if (resuming && s.active === session.id) {
+        const [tab] = await chrome.tabs.query({
+          active: true,
+          lastFocusedWindow: true,
+        });
+        await updateResumedTab(s, tab);
+      }
     }
     if (msg.type === "exclude" || msg.type === "exclude-site") {
       const [tab] = msg.url
@@ -1141,8 +1213,8 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
           if (
             s.shareSessionPreferences &&
             s.newSessionDefaults &&
-            JSON.stringify(remote.settings) !==
-              JSON.stringify(s.newSessionDefaults)
+            JSON.stringify(sessionDefaults(remote.settings)) !==
+              JSON.stringify(sessionDefaults(s.newSessionDefaults))
           ) {
             remote.settings = structuredClone(s.newSessionDefaults);
             enqueue(s, "PATCH", `/api/sessions/${remote.id}`, {

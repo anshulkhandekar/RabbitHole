@@ -99,3 +99,19 @@ Validated saves reject mismatched session/title arguments without writing and re
 Deploy the backend, reload the extension/research tabs, and manually paste this checkout's agent instructions. Live verification remains **not done**. The final isolated audit prompt is in docs/final-testing-prompt-2026-10-28.md.
 
 L1/L2 are fixed: deleted-find failures count only submitted finds still present and unprocessed (including hidden finds), and question top-ups distinguish unknown variantOf IDs from saved parents excluded by hidden/deleted sources; live verification remains pending, and L2 requires the backend deploy already listed above.
+
+## Shared-preference sync loop — October 29
+
+Live inspection found identical shared preferences repeatedly queued because browser storage and server responses used different JSON key orders. Refresh now normalizes both through the existing preference model before comparing them; actual preference changes still sync. A worker regression covers repeated refreshes and a real depth difference. This extension-only fix requires rebuilding and reloading the extension and research tabs; no backend deploy, connector release or live Instructions update is needed for this change. Confirm the queue stays empty across several refresh cycles after reload; live verification of the fix remains pending.
+
+## Resume on the current page — October 29
+
+Resuming from the sidebar immediately refreshes the current research tab. Included tabs rescan; unincluded tabs offer a page-local bunny prompt with Include tab and Not now, without collecting before consent. Acceptance includes and scans the tab without a page reload. Dismissal retains the saved hidden-indicator preference, and the prompt is cleared on navigation or a session change. Excluded pages remain excluded. Hide is restored with Alt+Shift+B (Option+Shift+B on Mac) or through the toolbar's side panel → Read without sidebar; starting a new session also restores the indicator. Worker and content regressions cover resume, acceptance, dismissal and stale/excluded-page rejection. Rebuild/reload the extension and research tabs; no backend, connector schema or agent-instruction changes are involved. Live verification remains pending.
+
+## Quote recovery and article Undo — October 29
+
+Repeated live Go quotation failures exposed a recovery gap beyond the automated fixtures. Invalid quotations are still rejected atomically. MCP validation errors now optionally return bounded evidenceRepairs with exact passages from the same visible source, ranked by word overlap; these are untrusted source data and are not proof of a claim. Go must choose a supporting passage, copy it verbatim and revalidate the full guide. Candidates are never substituted automatically or written to server logs. A 14-source regression and an authenticated MCP flow cover failure → correction → validation → separate approved-save call without discarding the guide. This tests the recovery contract, not live Go generation.
+
+The bunny's Article saved notice now offers a reverse-arrow Undo for ten seconds. Undo deletes that exact page's article through the existing local tombstone and queued-delete path, including offline, without opening the sidebar. Identical automatic recapture is suppressed. Worker/content tests cover one-click removal, repeated Undo, capture isolation and recapture suppression; the packaged browser suite checks the visible action.
+
+Rollout: deploy the backend changes, reload the rebuilt extension and research tabs, and manually paste this checkout's updated integrations/superhuman/agent-instructions.md into the live Go Instructions field. MCP tool input schemas remain unchanged at schema 8; no connector release is needed. Keep Write approval at Always ask. Re-run the real 14-find Go session through validation and approved save, then try Article saved → Undo and confirm the find stays removed after refresh. Live verification remains pending.

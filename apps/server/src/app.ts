@@ -117,6 +117,8 @@ export function createApp(
         );
         return {
           ...result({
+            ...(e instanceof DomainError &&
+              e.details !== undefined && { details: e.details }),
             error:
               e instanceof ZodError
                 ? e.issues

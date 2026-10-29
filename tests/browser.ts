@@ -136,6 +136,10 @@ try {
   await ui.evaluate(() => chrome.runtime.sendMessage({ type: "reading-mode" }));
   const indicator = research.locator("[data-rabbithole-reading]");
   await indicator.waitFor();
+  await expect(
+    research.getByRole("button", { name: "Undo article save", exact: true }),
+  ).toBeVisible();
+  await research.screenshot({ path: "test-results/article-saved-undo.png" });
   assert.ok(
     (await indicator.boundingBox())!.width <= 60,
     "Reading mode should leave only a compact rabbit until hovered",
