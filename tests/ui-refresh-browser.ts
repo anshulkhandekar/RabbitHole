@@ -188,6 +188,187 @@ try {
       fullPage: true,
     });
   };
+  // Question-only saves replace the session while the map remains mounted.
+  await seed({}, "map");
+  await expect(page.locator(".react-flow__edge-path")).toHaveCount(1);
+  // Initial controlled-node measurement must also recover its handle bounds.
+  // Reopening exercises the same async layout/measurement boundary as a cold load.
+  for (let opening = 0; opening < 3; opening++) {
+    await seed({}, "map");
+    await expect(
+      page.locator(".react-flow__node .idea-card.ready"),
+    ).toHaveCount(4);
+    await expect(page.locator(".react-flow__edge-path")).toHaveCount(1);
+  }
+  for (const version of [2, 3]) {
+    await worker.evaluate(async (version) => {
+      const { state } = (await chrome.storage.local.get("state")) as {
+        state: any;
+      };
+      state.sessions.s1.version = version;
+      state.sessions.s1.analysis.studyItems.push({
+        ...state.sessions.s1.analysis.studyItems[0],
+        id: `topup-${version}`,
+      });
+      await chrome.storage.local.set({ state });
+    }, version);
+    await page.clock.runFor(1500);
+    await expect(
+      page.locator(".react-flow__node .idea-card.ready"),
+    ).toHaveCount(4);
+    await expect(page.locator(".react-flow__edge-path")).toHaveCount(1);
+    await expect
+      .poll(() =>
+        page
+          .locator(".react-flow__edge-path")
+          .evaluateAll((paths) =>
+            paths.every(
+              (p) =>
+                Number.parseFloat(getComputedStyle(p).strokeDashoffset) === 0,
+            ),
+          ),
+      )
+      .toBe(true);
+  }
+  await worker.evaluate(async () => {
+    const { state } = (await chrome.storage.local.get("state")) as {
+      state: any;
+    };
+    // Visible graph changes (e.g. source visibility) do not necessarily bump version.
+    state.sessions.s1.analysis.concepts.push({
+      ...state.sessions.s1.analysis.concepts[0],
+      id: "new-detail",
+      parentId: "n1",
+      main: false,
+      label:
+        "A newly added detail with a longer label that changes node measurements",
+    });
+    state.sessions.s1.analysis.edges.push({
+      ...state.sessions.s1.analysis.edges[0],
+      id: "new-link",
+      target: "new-detail",
+    });
+    await chrome.storage.local.set({ state });
+  });
+  await page.clock.runFor(1500);
+  await expect(page.locator(".react-flow__node .idea-card.ready")).toHaveCount(
+    5,
+  );
+  await expect(page.locator(".react-flow__edge-path")).toHaveCount(2);
+  await expect(page.locator(".react-flow__attribution")).toHaveCount(0);
+  const canvas = (await page.locator(".map-canvas").boundingBox())!;
+  const zoomBefore = await page
+    .locator(".react-flow__viewport")
+    .evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).a);
+  for (let i = 0; i < 3; i++) {
+    await page.mouse.move(canvas.x + 120, canvas.y + canvas.height - 120);
+    await page.mouse.down();
+    await page.mouse.move(
+      canvas.x + canvas.width - 30,
+      canvas.y + canvas.height - 120,
+      { steps: 8 },
+    );
+    await page.mouse.up();
+    await page.clock.runFor(800);
+  }
+  await expect
+    .poll(() =>
+      page.locator(".react-flow__node").evaluateAll((nodes) => {
+        const host = document
+          .querySelector(".map-canvas")!
+          .getBoundingClientRect();
+        return (
+          Math.min(...nodes.map((n) => n.getBoundingClientRect().left)) <
+            host.right - 30 &&
+          Math.max(...nodes.map((n) => n.getBoundingClientRect().right)) >
+            host.left + 30
+        );
+      }),
+    )
+    .toBe(true);
+  expect(
+    await page
+      .locator(".react-flow__viewport")
+      .evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).a),
+  ).toBeCloseTo(zoomBefore);
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  await seed(
+    {
+      sessions: {
+        s1: {
+          ...session,
+          captures: [Capture.parse(capture())],
+          analysis: {
+            ...a,
+            edges: [
+              {
+                ...a.edges[0],
+                label: "Roles create interaction boundaries",
+                evidenceKind: "inference",
+              },
+            ],
+          },
+        },
+      },
+    },
+    "map",
+  );
+  await page.locator(".react-flow__edge").first().waitFor();
+  await page
+    .locator(".react-flow__edge")
+    .first()
+    .evaluate((el) =>
+      el.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+  await expect(page.locator(".connection-title")).toHaveText(
+    "Roles create interaction boundaries",
+  );
+  await expect(page.locator(".connection-endpoints button")).toHaveCount(2);
+  await expect(
+    page.getByText("Go inferred this relationship", { exact: true }),
+  ).toBeVisible();
+  await page.clock.runFor(800);
+  await page.screenshot({
+    path: "test-results/connection-drawer-inferred.png",
+  });
+  const sessionPreviews = Object.fromEntries(
+    Array.from({ length: 20 }, (_, i) => {
+      const sid = `preview-${i}`;
+      return [
+        sid,
+        {
+          ...session,
+          id: sid,
+          title: `Older rabbit hole ${i}`,
+          createdAt: new Date(Date.UTC(2020, 0, i + 1, 12)).toISOString(),
+          updatedAt: "2026-10-29T12:00:00Z",
+        },
+      ];
+    }),
+  );
+  await seed({
+    sessions: { s1: session, ...sessionPreviews },
+    sessionLastUsed: { "preview-0": "2030-01-01T12:00:00Z" },
+  });
+  await page
+    .getByRole("button", { name: "Switch rabbit hole", exact: true })
+    .click();
+  const previews = page.locator(".session-previews");
+  await expect(previews.locator('[role="menuitem"]')).toHaveCount(21);
+  await expect(previews.locator('[role="menuitem"]').first()).toContainText(
+    "Older rabbit hole 0",
+  );
+  await expect(previews.locator("time").first()).toHaveAttribute(
+    "datetime",
+    "2020-01-01T12:00:00.000Z",
+  );
+  expect(
+    await previews.evaluate(
+      (el) => el.scrollHeight > el.clientHeight && el.clientHeight <= 8 * 70,
+    ),
+  ).toBe(true);
+  await page.screenshot({ path: "test-results/session-previews.png" });
+  await page.keyboard.press("Escape");
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
     await seed();
@@ -201,6 +382,13 @@ try {
       page.getByRole("button", { name: "Settings", exact: true }),
     ).toBeVisible();
     await shot("hub-incomplete", scheme);
+    await page
+      .getByRole("button", { name: "Add questions", exact: true })
+      .click();
+    await page.getByLabel("Number of new questions").fill("4");
+    await expect(page.getByLabel("Medium — apply")).toBeChecked();
+    await shot("question-request", scheme);
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await page.getByRole("button", { name: /^Start / }).click();
     await page.locator('[aria-haspopup="dialog"]').click();
     await expect(
@@ -236,7 +424,7 @@ try {
       },
     });
     await expect(
-      page.getByRole("heading", { name: /You've tried every question/ }),
+      page.getByRole("heading", { name: /No unanswered original questions/ }),
     ).toBeVisible();
     await shot("exhausted", scheme);
     await seed();
@@ -326,6 +514,13 @@ try {
     ).toBe("1");
     await shot("hidden-find-menu", scheme);
     await page.keyboard.press("Escape");
+    const expansion = page.locator(".capture-details summary").first();
+    await expansion.click();
+    await expect(page.locator(".capture-details[open]").first()).toBeVisible();
+    await expect(expansion.locator("svg")).toHaveCount(1);
+    await shot("source-expander", scheme);
+    await expansion.press("Enter");
+    await expect(page.locator(".capture-details[open]")).toHaveCount(0);
     await seed(
       { sessions: { s1: { ...session, analysis: { ...a, edges: [] } } } },
       "map",

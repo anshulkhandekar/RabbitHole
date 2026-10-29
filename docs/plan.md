@@ -1,3 +1,5 @@
+> Historical checkpoint / audit. For the current build, use the [documentation index](README.md), [status](status.md) and [release checklist](release-checklist.md). Dated results below are not current live sign-off.
+
 # Stage 1 implementation plan
 
 Stage 1 is closed as a development checkpoint. See [checkpoint](stage-1.md) and [next-chat handoff](handoff.md); upcoming user feedback sets Stage 2 priorities.

@@ -184,6 +184,12 @@ test("a solid topic without harder questions asks Go instead of claiming readine
       /Basics solid.*ask Go for harder/i,
     );
     await click(button(/^Ask Go for the missing questions/));
+    assert.equal(
+      prompt,
+      "",
+      "choose question settings before sending a request",
+    );
+    await click(button(/^Ask Go to add questions/));
     assert.match(prompt, /GPU: harder/);
   } finally {
     await p.dispose();
@@ -357,7 +363,7 @@ test("Practice singular counts cover one harder topic, question and minute", asy
   try {
     assert.match(
       document.body.textContent!,
-      /Harder questions exist for 1 topic\./,
+      /medium\/hard questions are saved for 1 of 2 topics/,
     );
     assert.doesNotMatch(document.body.textContent!, /1 topics|1 minutes/);
   } finally {

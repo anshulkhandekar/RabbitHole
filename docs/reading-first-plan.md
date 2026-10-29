@@ -1,3 +1,5 @@
+> Historical checkpoint / audit. For the current build, use the [documentation index](README.md), [status](status.md) and [release checklist](release-checklist.md). Dated results below are not current live sign-off.
+
 # Reading first: iteration plan
 
 The product should preserve a research trail quietly, then reconstruct the specific ideas, mechanisms and disagreements in that trail. Browsing volume is not a learning goal.

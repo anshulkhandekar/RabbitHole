@@ -1,3 +1,5 @@
+> Historical checkpoint / audit. For the current build, use the [documentation index](README.md), [status](status.md) and [release checklist](release-checklist.md). Dated results below are not current live sign-off.
+
 Perform RabbitHole's final adversarial regression audit before I test it myself as a real user.
 
 Checkout: /Users/anshulkhandekar/RabbitHole/rabbitv4-2

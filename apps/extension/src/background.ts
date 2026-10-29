@@ -45,6 +45,7 @@ type Local = {
   goTabs?: Record<string, number>;
   mapSeen?: Record<string, number>;
   mapUpdated?: Record<string, number>;
+  sessionLastUsed?: Record<string, string>;
   // Tab-scoped like bindings: cleared on browser restart.
   offers: Record<string, Offer>;
   hush: Record<string, number>;
@@ -144,6 +145,17 @@ const persist = async (s: Local) => {
 };
 const enqueue = (s: Local, method: string, path: string, body?: unknown) =>
   s.queue.push({ id: crypto.randomUUID(), method, path, body });
+function markSessionUsed(s: Local, id: string) {
+  const previous = Math.max(
+    0,
+    ...Object.values(s.sessionLastUsed ?? {}).map(
+      (value) => Date.parse(value) || 0,
+    ),
+  );
+  (s.sessionLastUsed ??= {})[id] = new Date(
+    Math.max(Date.now(), previous + 1),
+  ).toISOString();
+}
 function startContext(tab?: chrome.tabs.Tab) {
   const regular = !tab?.incognito && /^https?:/.test(tab?.url ?? "");
   const url = tab?.url ? new URL(tab.url) : undefined;
@@ -242,6 +254,7 @@ function createSession(
     attempts: [],
   };
   s.sessions[id] = session;
+  markSessionUsed(s, id);
   s.active = id;
   s.searchSession = id;
   s.readingMode = true;
@@ -557,6 +570,7 @@ async function capture(
   }
   parsed.parentCaptureId = parentCaptureId;
   session.captures.push(parsed);
+  markSessionUsed(s, session.id);
   s.lastCapture[tabId] = parsed.id;
   if (session.title === "New rabbit hole" && parsed.sourceType === "search")
     session.title = parsed.text.slice(0, 140);
@@ -1133,6 +1147,8 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       }
       await persist(s);
     }
+    if (["select", "patch", "review"].includes(msg.type) && s.sessions[msg.id])
+      markSessionUsed(s, msg.id);
     if (
       [
         "patch",
@@ -1187,6 +1203,9 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
               .map((c) => local.captures.find((l) => l.id === c.id) ?? c);
           }
           if (local) {
+            // First server receipt may be later than the user's offline start.
+            if (Date.parse(local.createdAt) < Date.parse(remote.createdAt))
+              remote.createdAt = local.createdAt;
             remote.practice = local.practice;
             remote.captures.push(
               ...local.captures.filter(

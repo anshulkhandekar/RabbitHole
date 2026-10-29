@@ -59,6 +59,50 @@ test("measured layered layout respects depth and has no overlapping cards", asyn
   assert.ok(y.y >= x.y + x.height + 96);
   assert.deepEqual(result, await model.layoutIdeas(a, caps, sizes));
 });
+
+test("main-topic branches at different source depths retain distinct columns", async () => {
+  const a = analysis();
+  a.concepts = [
+    { ...a.concepts[0], main: true },
+    { ...a.concepts[1], main: true, captureIds: ["c2"] },
+    {
+      ...a.concepts[0],
+      id: "n3",
+      label: "A third independent topic",
+      main: true,
+      captureIds: ["c3"],
+    },
+    {
+      ...a.concepts[0],
+      id: "detail",
+      label: "A detail",
+      parentId: "n2",
+      captureIds: ["c4"],
+    },
+  ] as any;
+  a.edges = [a.edges[0], { ...a.edges[0], id: "branch", target: "n3" }];
+  const caps = [1, 2, 3, 4].map((i) => ({
+    ...capture(`c${i}`),
+    timestamp: `2026-10-2${i}T10:00:00.000Z`,
+    tag: "none" as const,
+    references: [],
+  }));
+  const result = await model.layoutIdeas(
+    a,
+    caps,
+    new Map(a.concepts.map((c) => [c.id, { width: 240, height: 80 }])),
+  );
+  const second = result.nodes.find((n) => n.id === "n2")!,
+    third = result.nodes.find((n) => n.id === "n3")!,
+    detail = result.nodes.find((n) => n.id === "detail")!;
+  assert.notEqual(
+    second.x,
+    third.x,
+    "independent topics must not collapse into one chronological column",
+  );
+  assert.equal(detail.x, second.x, "details stay in their main topic's column");
+  assert.ok(third.y > second.y, "source depth remains truthful");
+});
 // A label at the path midpoint would collide; placement must search beyond the node bounds.
 test("label placement avoids nodes and previously placed labels", () => {
   const result = model.placeLabels(

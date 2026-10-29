@@ -1,3 +1,5 @@
+> Historical checkpoint / audit. For the current build, use the [documentation index](README.md), [status](status.md) and [release checklist](release-checklist.md). Dated results below are not current live sign-off.
+
 # RabbitHole v2 verification — October 25, 2026
 
 Implemented in the extension source and built into `dist/extension`. The installed extension has **not** been reloaded or signed off against its real saved session.

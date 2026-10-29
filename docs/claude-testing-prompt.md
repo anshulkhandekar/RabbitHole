@@ -1,3 +1,5 @@
+> Historical checkpoint / audit. For the current build, use the [documentation index](README.md), [status](status.md) and [release checklist](release-checklist.md). Dated results below are not current live sign-off.
+
 # RabbitHole independent release evaluation
 
 You are independently testing RabbitHole as a release candidate. Your job is to understand the extension and Go agent, test every implemented user-facing feature and consequential data boundary, evaluate the generated learning experience, and decide whether this version is ready to freeze for a submission demo.

@@ -2,13 +2,56 @@
 
 **Keep the trail. Find the connection.**
 
-RabbitHole captures an explicitly enabled browsing session, then lets a Superhuman Go agent turn its actual sources into a concept map and recall activities. The Chrome extension handles collection and study mechanics. Go owns the generative reasoning. An authenticated backend stores and validates the results; no separate LLM API key is required.
+You can spend an hour following links and still struggle to explain how the ideas fit together. Browser history remembers addresses. A chat summary remembers what you pasted. RabbitHole preserves an intentionally collected research trail, turns its sources into an evidence-linked map with Superhuman Go, and helps you test what you can explain afterward.
 
-**Stage 3 test build — October 27, 2026.** Search cards, source controls, richer explanations, confidence/hints, and exports are implemented, with fixes for source removal, offline deletion recovery, keyboard submission, and map resizing. Start with the [current test-build guide](docs/stage-3-ready.md) for installation, verification, and the remaining live backend/Go update. Earlier checkpoints remain in [Stage 1](docs/stage-1.md) and the [handoff](docs/handoff.md).
+A Chrome extension collects searches, articles and highlights. Go synthesizes the material and writes learning activities through an authenticated MCP connector. RabbitHole stores the guide, links claims back to sources, and keeps practice progress across visits. No separate LLM API key is required.
 
-## Quick start
+**Demo candidate — October 29, 2026.** The [release status](docs/status.md) distinguishes automated evidence from the final live rehearsal. The current connector uses schema **8**. See the [documentation index](docs/README.md) for setup, design decisions and dated evaluations.
 
-Requires Node 22.20+ and Chrome 120+.
+## The experience
+
+1. **Research intentionally.** Start a named rabbit hole, include research tabs and follow links. Pause, exclude pages or remove accidental finds. The compact bunny lets you read without keeping a sidebar open; Article saved offers a quick Undo.
+2. **Make the connections.** Send to Go copies a session-specific prompt and opens your configured agent. Paste/send it, let Go inspect the actual captures, then approve a validated save. A newer saved version ends the waiting state; any unprocessed finds remain clearly counted.
+3. **Inspect the reasoning.** Summary explains mechanisms, implications and gaps. Map organizes main ideas and their details, with a reading route and source drawer. Dashed connections are Go inferences; supported connections link to captured evidence. Layout never manufactures a relationship.
+4. **Practise deliberately.** Choose a topic, New questions, Review misses or eligible medium/hard practice. Checked answers save immediately. Retry variants are kept separate from unanswered original questions. Request more questions with a topic, count and difficulty selection.
+5. **Return later.** Session previews retain original start dates and sort by recent use or updates. Your trail, saved guide and attempts persist; JSON export keeps a portable record.
+
+Real demo clips will be added after the final live rehearsal and recording. Generated test fixtures are not presented as Go output.
+
+## Why the Go handoff is explicit
+
+MCP lets **Go call RabbitHole's tools**. It does not itself let the extension start a Go conversation. This implementation has no verified supported external invocation API, so it copies the precise prompt, opens Go and waits for an actual saved backend version. Opening a tab is never reported as completed generation. Writes retain **Always ask** approval.
+
+The public Go builder now documents beta features and triggers. We have not established that those features provide an authenticated third-party extension invocation path for this project; private or partner capabilities may differ. [Platform findings](docs/platform-findings.md) records the sources and this uncertainty. A supported invocation adapter is a future improvement, rather than an undocumented endpoint workaround.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  Pages[Included research tabs] --> Extension[Chrome MV3 extension]
+  Extension --> Local[Local trail and retry queue]
+  Extension -->|Authenticated sync| API[Express API]
+  API --> DB[(Persistent SQLite)]
+  Extension -.->|Prompt copied; user sends| Go[Superhuman Go agent]
+  Go -->|Read and validate| MCP[Owner-scoped MCP tools]
+  Go -->|User approves save| MCP
+  MCP --> DB
+  API -->|Observed saved version| Workspace[Summary, Map and Practice]
+```
+
+| Component                 | Responsibility                                                                      |
+| ------------------------- | ----------------------------------------------------------------------------------- |
+| `apps/extension`          | Scoped capture, durable queue, reading widget, workspace and deterministic practice |
+| `apps/server`             | Owner authentication, six MCP tools, atomic validation and SQLite persistence       |
+| `packages/contracts`      | Shared runtime schemas; optional additions preserve older sessions                  |
+| `integrations/superhuman` | Connector definition and canonical agent instructions                               |
+| `tests`                   | Model, worker, authenticated MCP and packaged-extension browser regressions         |
+
+Go owns generative reasoning. The server does not fetch arbitrary source URLs or run another LLM. Source IDs, quotations and versions are checked before a save; those checks cannot prove the semantic truth of a generated explanation. See [architecture](docs/architecture.md), [data guarantees](docs/data-flow.md) and [tradeoffs](docs/decisions.md).
+
+## Run locally
+
+Requires Node **22.20+** and Chrome **120+**.
 
 ```sh
 npm ci
@@ -17,49 +60,39 @@ npm run check
 npm start
 ```
 
-The setup command creates an ignored `.env` with a random personal token without printing it. Server defaults to `http://localhost:3210`; SQLite persists in ignored `data/rabbithole.sqlite`. Open `.env` locally and copy only your token value from `RABBITHOLE_USERS` into extension Settings. Never commit/share this file.
+Setup creates an ignored `.env` with a random personal token and leaves existing configuration intact. The server defaults to `http://localhost:3210`; ignored `data/rabbithole.sqlite` holds the database.
 
-1. In Chrome, open `chrome://extensions`, enable Developer mode, select **Load unpacked**, and choose this project's `dist/extension` folder.
-2. Pin RabbitHole. Open a normal research webpage and click its toolbar action to open the side panel.
-3. Open Settings. Enter the backend URL, personal token, and your saved Go agent URL. Save and grant optional website access when Chrome asks.
-4. Start a session **from the side panel on your research tab**. Searches and readable pages are captured on that tab and observable child tabs. Other tabs need Include tab. Use Alt+Shift+H or the selection context menu for highlights. Reassign at `chrome://extensions/shortcuts` if needed.
-5. Read without watching the trail: use **Read without sidebar** for a compact rabbit indicator. Automatic highlights are an opt-in session setting; manual selection shortcuts still work. Pause stops new captures. Automatic sync sends the local queue to the backend; it does not invoke Go.
-6. Deploy the backend and connect Go using [deployment](docs/deployment.md) and [agent setup](docs/go-agent-setup.md). Go cannot access localhost. Send to Go attempts to copy the precise session prompt and opens your agent. Paste/send it and approve a save when asked. The extension polls for an actual saved analysis; it never presents opening Go as generation.
-7. Start at the main idea on the radial map, explore a branch, and inspect its short source excerpts. Practice opens on Quiz; matching provides another objective check. Open-response and flashcards remain optional. Use **Rebuild with Go** to enrich an older map without inventing new captures; paste/send and approve its save.
+1. Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `dist/extension` from this checkout.
+2. Open RabbitHole on a research tab. In Settings enter the backend URL, your token from `.env` and your saved Go agent URL. Grant website access when prompted.
+3. Start a session and confirm captures sync. Article collection is configurable; searches and manual highlights still work when it is off. Use Alt+Shift+H for a selection, or the selection context menu. Chrome shortcuts can be reassigned.
+4. For Go generation, deploy a reachable HTTPS backend and configure the connector using [deployment](docs/deployment.md) and [agent setup](docs/go-agent-setup.md). Go cannot reach your localhost. The extension and Go must use credentials for the same owner.
 
-The unpacked extension and a reachable backend are both required. Sharing the Go agent alone does not install the extension or grant backend access. On a browser restart the session is preserved and collection is paused; explicitly include a research tab and resume. Use a clean public-source profile for judging.
+After rebuilding an installed unpacked extension, **Reload** its Chrome extensions card and refresh research/Go tabs. Browser restart preserves sessions but pauses collection and clears tab bindings. Resume and explicitly include your current research tab. Alt+Shift+B restores a hidden bunny; hiding it does not pause capture.
 
-## Verification
+## Verify
 
 ```sh
-npm run check         # typecheck, focused backend/MCP tests, production build
-npm run lint          # formatter check
+npm run check          # types, regression tests, production build
+npm run lint           # formatting
 npx playwright install chromium
-npm run test:browser  # isolated extension harness, synthetic pages and saved analysis
-npm run test:reload   # actual runtime-invalidation cleanup in a disposable profile
-npm run test:stage3   # new search/source/practice/export user flow and deletion recovery
-npm run test:release  # all of the above, including build and formatting
+npm run test:release   # check + lint + both browser suites + Stage 3 + reload
+git diff --check
 ```
 
-For an existing Chromium install, set `CHROMIUM_PATH` to its executable; see [maintenance](docs/maintenance.md) for the verified local path. Generated screenshots go in ignored `test-results/` and are not retained as repository documentation. Browser tests copy the built extension into a temporary profile and pregrant hosts in a test-only manifest, since native permission dialogs cannot be reliably automated headlessly. They never modify the production manifest and never present fixtures as Go output. Production builds contain no fixture analysis or seeded study results.
+Set `CHROMIUM_PATH` to an existing Chromium executable when needed. See [maintenance](docs/maintenance.md) for suite boundaries and [release checklist](docs/release-checklist.md) for live acceptance. Browser fixtures use temporary profiles and test-only permissions; they do not verify real Go instruction-following or native permission dialogs. Screenshots and private audit output remain ignored.
 
-The [reading-first iteration](docs/reading-first.md) records the current behavior, rich-analysis contract and verification limits. The earlier [UI redesign verification](docs/ui-redesign.md) records the supplied design, local fonts, responsive states and evidence-depth layout. After rebuilding an installed unpacked extension, click **Reload** in `chrome://extensions` to activate its new UI, worker and icons. Refresh existing Go/research tabs once after reloading to replace old content scripts. Your saved connection and sessions remain in Chrome storage.
+## Tradeoffs and next steps
 
-## Components
+- Explicit tab inclusion favours user control over capturing all browser history. Opener lineage indicates browsing continuity, not topic relevance.
+- A durable local queue supports temporary disconnection; permanent HTTP failures remain visible and can require intervention. Device storage is finite.
+- SQLite on a persistent disk keeps the prototype small and transactional; it requires one service instance. Static personal tokens need manual provisioning and rotation.
+- Practice checks saved keys and records confidence/hints. It is not a measured learning-gain claim or a spaced-repetition scheduler. Content quality needs a real-source review.
+- Captures are bounded to 12,000 characters, sessions to 300 finds, and guides to 40 activities. Google Overview extraction depends on the current DOM; manual selection is the fallback.
 
-| Location                  | Responsibility                                                         |
-| ------------------------- | ---------------------------------------------------------------------- |
-| `apps/extension`          | Content script, MV3 service worker, React side panel/workspace/options |
-| `apps/server`             | Authenticated API, three MCP tools, SQLite transactions                |
-| `packages/contracts`      | Shared runtime schemas and IDs                                         |
-| `integrations/superhuman` | Paste-ready agent configuration                                        |
-| `tests`                   | Consequential boundaries and isolated browser harness                  |
-| `docs`                    | Setup, design, platform research, demo, teaching, honest status        |
+[Future work](docs/future-work.md) covers supported Go invocation, richer quality evaluation, cross-session review, authentication and scale. None is represented as shipped.
 
-Read [architecture](docs/architecture.md), [data flow](docs/data-flow.md), [learning design](docs/learning-design.md), [five-minute explanation](docs/explain-it-to-me.md), and [demo/submission storyboard](docs/demo.md).
+## Demo and project notes
 
-## Limits and publication
+The [demo plan](docs/demo.md) maps features to a short genuine user journey and a later GIF capture list. [Learning design](docs/learning-design.md) explains what practice can and cannot establish. [Stage 4](docs/stage-4.md) records the fixes and verification history.
 
-Article text is bounded at 12,000 characters; sessions at 300 captures. AI Overview extraction is conservative and may require manual selection. Tab lineage is observable continuity, not AI relevance classification. Device storage is finite; export/delete old sessions. Auth is personal static tokens for the prototype; keep privileged credentials server-side. SQLite requires the documented durable mount and a single service instance. Review [status](docs/status.md) for unverified/deferred items.
-
-Keep the repository private until explicitly approved for release. No project license has been granted yet; **MIT is proposed for later approval**, with third-party licenses preserved. Before publication: remove secrets, research databases, personal fixtures/account screenshots and Git history leaks; rotate any exposed tokens; review dependencies and attribution; verify demo data permissions; choose the project license; and re-run checks. See [THIRD_PARTY.md](THIRD_PARTY.md).
+Repository publication and a project license still require the owner's decision; no project license has been granted. Third-party notices remain in [THIRD_PARTY.md](THIRD_PARTY.md) and [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt). Local credentials, research databases, browser profiles and private screenshots must stay out of commits and demo footage.

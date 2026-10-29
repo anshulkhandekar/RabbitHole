@@ -1,3 +1,5 @@
+> Historical checkpoint / audit. For the current build, use the [documentation index](README.md), [status](status.md) and [release checklist](release-checklist.md). Dated results below are not current live sign-off.
+
 # RabbitHole release evaluation — October 28, 2026
 
 **Verdict: READY AFTER SPECIFIC FIXES.** The real journey works end to end on the live stack: captures from the installed extension reach the backend, Go reads every page of a trail longer than twelve captures, the read-only validation and approved save go through, and the extension then shows an evidence-linked map. Practice records progress, and incremental, question-only, sparse and enrichment runs all succeed. Four defects are visible in a demo or silently damage data, and should be fixed before recording.

@@ -1,3 +1,5 @@
+> Historical checkpoint / audit. For the current build, use the [documentation index](README.md), [status](status.md) and [release checklist](release-checklist.md). Dated results below are not current live sign-off.
+
 # Independent Stage 3 review — October 27, 2026
 
 **Historical review before fixes.** The issues below have since been addressed in this workspace. See [the current test build and verification instructions](stage-3-ready.md). The original probes are now maintained as `tests/stage3-regressions.test.ts` and `tests/stage3-browser.ts`, and the regressions are part of the release checks.

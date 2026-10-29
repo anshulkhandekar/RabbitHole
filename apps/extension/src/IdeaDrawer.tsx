@@ -85,19 +85,25 @@ export function IdeaDrawer({
             </p>
           </>
         ) : (
-          <h2 className="connection-sentence">
-            <button
-              onClick={() => onSelect({ kind: "concept", id: e!.source })}
-            >
-              {label(e!.source)}
-            </button>{" "}
-            {e!.label}{" "}
-            <button
-              onClick={() => onSelect({ kind: "concept", id: e!.target })}
-            >
-              {label(e!.target)}
-            </button>
-          </h2>
+          <>
+            <h2 className="connection-title">{e!.label}</h2>
+            <div className="connection-endpoints" aria-label="Connected ideas">
+              <button
+                onClick={() => onSelect({ kind: "concept", id: e!.source })}
+              >
+                {label(e!.source)}
+              </button>
+              <Icon name="chevronRight" size={16} />
+              <button
+                onClick={() => onSelect({ kind: "concept", id: e!.target })}
+              >
+                {label(e!.target)}
+              </button>
+            </div>
+            {e!.evidenceKind !== "supported" && (
+              <p className="connection-origin">Go inferred this relationship</p>
+            )}
+          </>
         )}
         {c?.claim && <p className="idea-claim">{c.claim}</p>}
         {c?.why && (

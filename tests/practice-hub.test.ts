@@ -39,6 +39,32 @@ const attempt = (
   timestamp: new Date().toISOString(),
   ...extra,
 });
+test("unused retry versions are reserved for misses, never advertised as unanswered New questions", () => {
+  const hub = p.practiceHub(bank(), [attempt("q1"), attempt("hard")]);
+  const topic = hub.topics[0];
+  assert.equal(topic.untested, 0);
+  assert.equal(topic.reserved, 1);
+  assert.equal(topic.lanes.new.length, 0);
+  assert.equal(topic.lanes.review.length, 0);
+});
+
+test("answered harder questions and harder retry versions do not imply missing original questions", () => {
+  const a = bank();
+  a.studyItems[1].level = "transfer";
+  const topic = p.practiceHub(a, [attempt("q1"), attempt("hard")]).topics[0];
+  assert.match(p.harderLockReason(topic), /already answered/i);
+  const onlyVariant = {
+    ...a,
+    studyItems: a.studyItems.filter((i) => i.id !== "hard"),
+  };
+  assert.ok(
+    p
+      .practiceHub(onlyVariant, [])
+      .coverage.missingLanes.some(
+        (m) => m.topicId === "n1" && m.lane === "harder",
+      ),
+  );
+});
 test("topics follow ancestors, deduplicate cross-topic questions and report missing coverage", () => {
   const a = bank();
   a.studyItems[0].conceptIds = ["n1", "n2"];
@@ -50,7 +76,7 @@ test("topics follow ancestors, deduplicate cross-topic questions and report miss
     ["empty"],
   );
   assert.equal(hub.topics[0].counts.quiz, 2);
-  assert.equal(hub.all.untested, 3);
+  assert.equal(hub.all.untested, 2);
   assert.equal(
     p.practiceHub({ ...a, concepts: analysis().concepts }, []).topics.length,
     2,
@@ -68,6 +94,7 @@ test("new questions start basic, review uses a sibling and confident misses lead
     hub.topics[0].strong +
       hub.topics[0].shaky +
       hub.topics[0].confidentMisses +
+      hub.topics[0].reserved +
       hub.topics[0].untested,
     3,
   );

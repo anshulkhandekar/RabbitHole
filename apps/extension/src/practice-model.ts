@@ -199,6 +199,7 @@ export type PracticeTopic = {
   items: StudyItem[];
   total: number;
   untested: number;
+  reserved: number;
   strong: number;
   shaky: number;
   confidentMisses: number;
@@ -234,10 +235,13 @@ export function harderReady(topic: PracticeTopic) {
 export function harderLockReason(topic: PracticeTopic) {
   const { ready, basicsReady, reason: r } = harderReady(topic);
   if (ready) return "";
-  if (basicsReady) return "Basics solid — ask Go for harder questions.";
+  if (basicsReady)
+    return topic.items.some((i) => !i.variantOf && !isBasic(i))
+      ? "All saved medium and hard questions are already answered."
+      : "Basics solid — ask Go for harder questions.";
   if (!r.basicTotal) return "Ask Go for basic questions first.";
   if (r.remaining)
-    return `Try all basics first: ${r.remaining} still untested.`;
+    return `Try all easy questions first: ${r.remaining} still unanswered.`;
   if (r.confidentMisses)
     return `Review ${r.confidentMisses} outstanding confident ${r.confidentMisses === 1 ? "miss" : "misses"} first.`;
   return `Get at least ${r.requiredRight} of ${r.basicTotal} basics right without hints (${r.rightWithoutHints} so far).`;
@@ -285,6 +289,7 @@ export function practiceHub(
   ): PracticeTopic {
     const counts = { quiz: 0, matching: 0, connection: 0, flashcard: 0 };
     let untested = 0,
+      reserved = 0,
       strong = 0,
       shaky = 0,
       confidentMisses = 0,
@@ -296,7 +301,8 @@ export function practiceHub(
       counts[item.type]++;
       const a = latest.get(item.id);
       if (!a) {
-        untested++;
+        if (item.variantOf) reserved++;
+        else untested++;
         continue;
       }
       const family = item.variantOf ?? item.id,
@@ -357,6 +363,7 @@ export function practiceHub(
       total: items.length,
       counts,
       untested,
+      reserved,
       strong,
       shaky,
       confidentMisses,

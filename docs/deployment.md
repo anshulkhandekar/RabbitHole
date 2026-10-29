@@ -2,7 +2,7 @@
 
 Use a single Render Node web service with a persistent disk. This keeps the explanation small: authenticated HTTP tools plus durable SQLite. A paid service/disk is required; review Render's actual plan and price before provisioning. This repository does not incur hosting charges by itself.
 
-1. Use the **private** repository at https://github.com/anshulkhandekar/RabbitHole. Do not make it public. This project is prepared with `origin` pointing to that repository.
+1. Connect the owner-approved repository in Render. Repository visibility is a separate owner decision; deployment does not require making it public.
 2. In Render, connect the private repository and create a Blueprint from `render.yaml`. Review the service plan and disk cost before confirming.
 3. The Blueprint generates `RABBITHOLE_TOKEN` on Render and sets `RABBITHOLE_OWNER=anshul`. In a manual service form, use Generate for the token; keep it private. Multi-owner deployments can instead use the `RABBITHOLE_USERS` JSON array in `.env.example`. No local credential needs to be uploaded to Render.
 4. Confirm `DATABASE_PATH=/var/data/rabbithole.sqlite` and a mounted persistent disk at `/var/data`. Never use free/ephemeral disk for the database.
@@ -19,6 +19,8 @@ For local use: `npm run setup:local`, `npm start`. Local backend data persists u
 
 Connecting the repository in Render’s Web Service wizard does not automatically apply render.yaml. Copy the build command, Node version, environment variables, disk mount, database path, and health check explicitly, or create the service as a Blueprint instead. Use `npm ci --include=dev && npm run build`, not the autofilled `npm install; npm run build`: npm ci clears native dependency binaries cached under a different Node version. After changing NODE_VERSION, rebuild before testing startup.
 
-## Verified deployment — October 24, 2026
+## Release checks
 
-Live origin: https://rabbithole-1c5e.onrender.com. Service `srv-dbefk8navr4c73ap9d30` runs Node 22.20.0 with `npm ci --include=dev && npm run build` and `npm run start`. A 1 GB persistent disk is mounted at `/var/data`; SQLite is `/var/data/rabbithole.sqlite`. The user approved $7/month compute and $0.25/month disk before tax/extra usage. Health returned 200; research without a token returned 401; extension sync and actual Go read/write succeeded. Never put the personal token here.
+Confirm the exact deployed commit, health, unauthorized request rejection, authenticated sync and persistence after restart. A previous live deployment is not verification of the current branch. The user reported a Render update at 12:24 CDT on October 29; later Go quotation failure still needs the new recovery-instruction live rerun.
+
+Merging/deploying updates server code only. Reload the extension and refresh research tabs after a local build; paste canonical agent Instructions separately. The current connector stays at schema 8 and requires no release for instruction/UI-only changes. See [release checklist](release-checklist.md).

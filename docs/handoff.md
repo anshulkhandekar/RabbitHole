@@ -1,3 +1,5 @@
+> Historical checkpoint / audit. For the current build, use the [documentation index](README.md), [status](status.md) and [release checklist](release-checklist.md). Dated results below are not current live sign-off.
+
 > Current Stage 3 release: see [the test/release guide](stage-3-ready.md) and [current status](status.md). The Stage 2 handoff below is retained as history.
 
 # Stage 2 checkpoint → Stage 3 handoff

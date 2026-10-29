@@ -7,6 +7,28 @@ import { visibleCaptureIds } from "../../../packages/contracts/src/sources";
 export function chronological(captures: CaptureData[]) {
   return [...captures].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 }
+export function recentSessions(
+  sessions: Session[],
+  lastUsed: Record<string, string> = {},
+) {
+  const stamp = (value?: string) => Date.parse(value ?? "") || 0;
+  const activity = (s: Session) =>
+    Math.max(stamp(s.updatedAt), stamp(lastUsed[s.id]), stamp(s.createdAt));
+  return [...sessions].sort(
+    (a, b) =>
+      activity(b) - activity(a) ||
+      stamp(b.createdAt) - stamp(a.createdAt) ||
+      a.id.localeCompare(b.id),
+  );
+}
+export const startedDate = (value: string) =>
+  new Date(value).toLocaleString([], {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 export function analysisDelta(
   before: AnalysisData | null | undefined,
   after: AnalysisData,

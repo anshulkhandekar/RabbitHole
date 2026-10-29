@@ -6,13 +6,13 @@ Random UUIDs identify sessions/captures/reviews. Owner comes only from bearer au
 
 Tab bindings and last-capture context use Chrome storage.session: they survive worker suspension but clear on browser restart. On a fresh browser session active collection pauses before state is returned; old local tab IDs are never reused. The worker remembers the last capture per tab; captures carry its ID as context. This is a best-effort chronological link, not an assertion that one source verifies another. Full URLs are stored; do not use sensitive/private pages in a judge profile. Text from form/editable fields is excluded before Readability parsing and selection capture. Automatic extraction is partial by design, not access-control bypass. No raw DOM or screenshots are retained.
 
-Google query extraction uses a small explicit supported-host allowlist. Overview parsing requires an explicitly labeled visible region; many Google variants will not match. In that case use explicit selection; searches and articles continue working. The DOM observer only schedules Google extraction, debounces mutations, and a low-frequency URL check handles History API navigation. Article clones are parsed once per successful URL, excluding inputs, editable regions, scripts, forms and navigation.
+Google query extraction uses a small explicit supported-host allowlist. Overview parsing requires an explicitly labeled visible region; many Google variants will not match. In that case use explicit selection; searches and articles continue working. The DOM observer only schedules Google extraction, debounces mutations, and a low-frequency URL check handles History API navigation. Article clones are parsed once per successful URL, excluding inputs, editable regions, scripts, forms, navigation, stylesheet-hidden elements and obvious consent banners. Repeated title/H1 text is joined with block whitespace without duplicating the title. Unprocessed Overview growth coalesces to the latest capture while preserving its search parent and deletion tombstones.
 
 ## Bounds
 
 - 12,000 characters per capture, 20 observed outbound references.
 - 300 captures/session; 100 sessions/owner; 2,000 review attempts/session.
-- GetSession returns at most 12 pending captures, with offset or explicit evidence IDs. Agent instructions cap one run at 24 captures.
+- GetSession returns at most 12 pending captures, with offset or explicit evidence IDs. Go follows every nextOffset page for the submitted pending batch. Twelve is a response-size boundary, not a run cap.
 - Analysis: 40 concepts, 70 edges, 40 study items; tool POST body limit 750 KB.
 - Extension storage.local has a browser quota shared by sessions and retry data. New capture storage is conservatively capped below the browser quota with a visible warning and toolbar badge. This prototype should be used for short sessions; export/delete old sessions. It is not an unlimited local archive. A full storage device/quota can prevent a capture from being saved; do not treat a page load as capture success.
 
@@ -29,3 +29,7 @@ A stale review fails rather than grading a changed activity. Checked quiz and ma
 Export downloads the selected local session as JSON, including sources, analysis, and study attempts. Sync first for the latest backend analysis. Delete removes the local session, clears pending mutations for it, removes tab associations, and queues a server DELETE. If offline, this deletion is retried; remote data remains until sync succeeds. Refresh skips locally pending deletes, preventing resurrection. A capture targeting a deleted server session is rejected. Host backups may retain historical data until their retention expires. Tokens are never included in session exports.
 
 There is no export import feature or automated backup restore UI. Personal tokens and SQLite files are ignored by Git. Operational console logs contain event names, counts, status, and versions, never source text or bearer tokens. These logs follow the host's retention rather than a separate durable processing-audit database.
+
+## Local display metadata
+
+Optional browser-only sessionLastUsed records recent meaningful use and is never sent as server session data. Session previews sort by recent use/server update but display the original createdAt. Refresh preserves an earlier local start when an offline session first synced later. Question requests and layout revisions do not rewrite start dates. A handoff completes when the saved version advances; its receipt counts processed submitted finds separately from still-pending finds. Deleted-find failures count only submitted captures that remain present and unprocessed, including hidden finds.
