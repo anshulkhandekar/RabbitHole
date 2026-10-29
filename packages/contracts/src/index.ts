@@ -194,7 +194,8 @@ export const Review = z.object({
   hintsUsed: z.number().int().min(0).max(3).optional(),
   timestamp: z.string().datetime(),
 });
-export type Attempt = z.infer<typeof Review>;
+// Browser-only provenance; never part of the review wire schema.
+export type Attempt = z.infer<typeof Review> & { localOnly?: boolean };
 export const SessionCreate = z.object({
   id: Id,
   title: z.string().min(1).max(140),

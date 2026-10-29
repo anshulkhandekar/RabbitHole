@@ -11,6 +11,7 @@ import {
   SessionPatch,
   Review,
   type Session,
+  type AnalysisData,
 } from "../../../packages/contracts/src/index";
 import {
   sourceRef,
@@ -235,9 +236,58 @@ export class Store {
   canonicalAnalysis(owner: string, input: unknown) {
     const payload = AnalysisInput.parse(input),
       s = this.get(owner, payload.sessionId);
-    return canonicalSourceReferences(payload, [
+    const canonical = canonicalSourceReferences(payload, [
       ...new Set([...s.captures.map((c) => c.id), ...(s.removed ?? [])]),
     ]);
+    if (
+      canonical.intent !== "rebuild" &&
+      canonical.expectedVersion === s.version
+    ) {
+      const saved = visibleAnalysis(s)?.studyItems ?? [];
+      for (const question of canonical.studyItems) {
+        const previous = saved.find((q) => q.id === question.id);
+        if (!previous) continue;
+        // Hints, difficulty and choice feedback can improve without erasing
+        // the provenance of the same question and answer key.
+        const fields = [
+          "type",
+          "prompt",
+          "answer",
+          "choices",
+          "correctIndex",
+          "conceptIds",
+          "concept",
+          "pairs",
+          "variantOf",
+        ] as const;
+        const sameContent = fields.every(
+          (key) =>
+            JSON.stringify(previous[key]) === JSON.stringify(question[key]),
+        );
+        if (!sameContent) continue;
+        question.captureIds = [
+          ...new Set([...previous.captureIds, ...question.captureIds]),
+        ];
+        const excerpts = new Map(
+          [...(previous.evidence ?? []), ...(question.evidence ?? [])].map(
+            (e) => [
+              JSON.stringify([
+                e.captureId,
+                e.quote.replace(/\s+/g, " ").trim(),
+              ]),
+              e,
+            ],
+          ),
+        );
+        if (question.captureIds.length > 20 || excerpts.size > 3)
+          throw new DomainError(
+            422,
+            `Question ${question.id} would exceed the citation limits while preserving its saved evidence (20 sources, 3 quotes). Keep the existing evidence or explicitly rebuild this question to replace citations; do not silently narrow them.`,
+          );
+        if (excerpts.size) question.evidence = [...excerpts.values()];
+      }
+    }
+    return canonical;
   }
   private analyze(owner: string, input: unknown, commit: boolean) {
     const p = this.canonicalAnalysis(owner, input);
@@ -414,7 +464,7 @@ export class Store {
       s.analysis = p;
       s.analysisPreferences = structuredClone(s.settings);
       s.analyzedAt = new Date().toISOString();
-      s.title = p.title;
+      if (s.title === "New rabbit hole") s.title = p.title;
       s.version++;
       s.processed = [...processed];
       this.put(owner, s);
@@ -430,6 +480,45 @@ export class Store {
         version: s.version,
         pending: pendingCount(s),
       };
+    })();
+  }
+  saveQuestions(owner: string, payload: AnalysisData) {
+    return this.db.transaction(() => {
+      const before = this.get(owner, payload.sessionId);
+      if (!before.analysis)
+        throw new DomainError(422, "Save a map before adding questions.");
+      const existing = new Set(before.analysis.studyItems.map((q) => q.id)),
+        additions = payload.studyItems.filter((q) => !existing.has(q.id));
+      if (before.analysis.studyItems.length + additions.length > 40)
+        throw new DomainError(
+          422,
+          "Question capacity changed. Submit fewer new questions and validate again.",
+        );
+      if (before.version === payload.expectedVersion) {
+        const available = new Set(visible(before).map((c) => c.id)),
+          cited = [
+            ...payload.concepts,
+            ...payload.edges,
+            ...payload.studyItems,
+          ].flatMap((item) => [
+            ...item.captureIds,
+            ...(item.evidence ?? []).map((e) => e.captureId),
+          ]);
+        if (cited.some((id) => !available.has(id)))
+          throw new DomainError(
+            422,
+            "A supporting source was hidden or deleted after validation. Re-run ValidateSessionQuestions with the current version; nothing was saved.",
+          );
+      }
+      // All ordinary version, evidence, hierarchy and answer-key checks still run.
+      const result = this.save(owner, payload),
+        current = this.get(owner, payload.sessionId);
+      current.analysis = {
+        ...before.analysis,
+        studyItems: [...before.analysis.studyItems, ...additions],
+      };
+      this.put(owner, current);
+      return result;
     })();
   }
   review(owner: string, id: string, input: unknown) {
@@ -467,7 +556,21 @@ export class Store {
         if (p.rating !== (correct ? "understood" : "again"))
           throw new DomainError(422, "Matching grade and rating disagree");
       }
-      if (!s.attempts.some((a) => a.id === p.id)) {
+      const existing = s.attempts.find((a) => a.id === p.id);
+      if (existing && p.note !== undefined && p.note !== existing.note) {
+        const changedAnswer = (Object.keys(Review.shape) as (keyof typeof p)[])
+          .filter((key) => key !== "note")
+          .some(
+            (key) => JSON.stringify(existing[key]) !== JSON.stringify(p[key]),
+          );
+        if (changedAnswer)
+          throw new DomainError(
+            422,
+            "An attempt ID cannot be reused for a different answer. Only its reasoning note can change.",
+          );
+        existing.note = p.note;
+        this.put(owner, s);
+      } else if (!existing) {
         if (s.attempts.length >= 2000)
           throw new DomainError(422, "Review limit reached");
         s.attempts.push(p);

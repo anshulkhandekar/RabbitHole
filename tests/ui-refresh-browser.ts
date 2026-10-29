@@ -10,10 +10,11 @@ import {
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { analysis, capture } from "./support";
-import type {
-  Session,
-  Attempt,
-  AnalysisData,
+import {
+  Capture,
+  type Session,
+  type Attempt,
+  type AnalysisData,
 } from "../packages/contracts/src/index";
 const server = createServer((_, res) => {
   res.setHeader("Content-Type", "application/json");
@@ -405,7 +406,49 @@ try {
       await expect(
         page.getByText("Go couldn't save your map", { exact: true }),
       ).toBeVisible();
+      await expect(page.locator(".handoff-failed")).toContainText(
+        "Your map hasn't changed. None of the sent finds are waiting now.",
+      );
+      await expect(
+        page
+          .locator(".handoff-failed")
+          .getByRole("button", { name: "Send again", exact: true }),
+      ).toBeDisabled();
+      await expect(
+        page
+          .locator(".handoff-failed")
+          .getByRole("button", { name: "Copy details", exact: true }),
+      ).toBeEnabled();
       await shot(`failed-${panel ? "panel" : "workspace"}`, scheme);
+      await seed(
+        {
+          goCompletion: "quiet",
+          sessions: {
+            s1: {
+              ...session,
+              captures: [Capture.parse(capture("other"))],
+              removed: ["c1", "c2"],
+            },
+          },
+          handoffs: {
+            s1: {
+              ...hand,
+              status: "failed",
+              reason: "A sent find was deleted.",
+            },
+          },
+        },
+        "sources",
+        panel,
+      );
+      await expect(page.locator(".handoff-failed")).toContainText(
+        "None of the sent finds are waiting now.",
+      );
+      await expect(
+        page
+          .locator(".handoff-failed")
+          .getByRole("button", { name: "Send again", exact: true }),
+      ).toBeEnabled();
     }
     await seed({ goCompletion: "quiet", handoffs: { s1: hand } }, "sources");
     await expect(

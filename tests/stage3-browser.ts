@@ -31,8 +31,12 @@ writeFileSync(
   };
 `,
 );
+writeFileSync(
+  extension + "/test-seed.html",
+  "<!doctype html><title>Fixture seeding</title>",
+);
 const browser = await chromium.launchPersistentContext(profile, {
-  channel: "chromium",
+  executablePath: process.env.CHROMIUM_PATH,
   headless: true,
   args: [
     `--disable-extensions-except=${extension}`,
@@ -253,6 +257,9 @@ try {
   await expect(search.locator(".offer")).toHaveCount(0);
   await search.close();
 
+  // Stop UI polling, then drain the worker queue before writing the fixture.
+  await ui.goto(new URL("test-seed.html", worker.url()).href);
+  await ui.evaluate(() => chrome.runtime.sendMessage({ type: "state" }));
   // Seed a source-grounded Go-shaped guide to test the new screens and downloads.
   const guide = analysis();
   Object.assign(guide, { sessionId: secondId });
@@ -344,7 +351,7 @@ try {
     });
   }
   await ui.getByRole("tab", { name: "Practice", exact: true }).click();
-  await ui.getByRole("button", { name: /^Quiz / }).click();
+  await ui.getByRole("button", { name: /^Start/ }).click();
   await ui.getByRole("button", { name: "Sure", exact: true }).click();
   await ui.getByRole("button", { name: /show a hint/ }).click();
   await ui.getByText("Think about batches.", { exact: false }).waitFor();

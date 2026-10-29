@@ -74,9 +74,18 @@ export function Settings(p: {
   const body = useRef<HTMLDivElement>(null),
     dialog = useRef<HTMLElement>(null),
     prevFocus = useRef<HTMLElement | null>(null);
-  const prefs = practicePreferences(p.state.practicePreferences),
-    settings =
+  const prefs = practicePreferences(p.state.practicePreferences);
+  const [settings, setSettings] = useState(
+    () => p.session?.settings ?? sessionDefaults(p.state.newSessionDefaults),
+  );
+  const latestSettings = useRef(settings),
+    draftPending = useRef(false);
+  useEffect(() => {
+    const next =
       p.session?.settings ?? sessionDefaults(p.state.newSessionDefaults);
+    latestSettings.current = next;
+    setSettings(next);
+  }, [p.session?.id]);
   function jump(id: string) {
     const el = body.current?.querySelector<HTMLElement>(
       `[data-section="${id}"]`,
@@ -107,15 +116,29 @@ export function Settings(p: {
   }, [p.connectionError]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape") p.onClose();
+      if (e.key === "Escape") void closeSettings();
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, []);
-  const saveSettings = (value: Partial<Prefs>) =>
-    p.session && !p.state.shareSessionPreferences
-      ? p.onSession({ settings: { ...settings, ...value } })
-      : p.onPreference({ newSessionDefaults: { ...settings, ...value } });
+  });
+  const draftSettings = (value: Partial<Prefs>) => {
+    const next = { ...latestSettings.current, ...value };
+    latestSettings.current = next;
+    draftPending.current = true;
+    setSettings(next);
+    return next;
+  };
+  const saveSettings = (value: Partial<Prefs>) => {
+    const next = draftSettings(value);
+    draftPending.current = false;
+    return p.session && !p.state.shareSessionPreferences
+      ? p.onSession({ settings: next })
+      : p.onPreference({ newSessionDefaults: next });
+  };
+  async function closeSettings() {
+    if (draftPending.current) await saveSettings({});
+    p.onClose();
+  }
   const switchControl = (
     label: string,
     checked: boolean,
@@ -140,7 +163,7 @@ export function Settings(p: {
     <div
       className={p.panel ? "settings-panel" : "modal-backdrop"}
       onClick={(e) => {
-        if (e.target === e.currentTarget && !p.panel) p.onClose();
+        if (e.target === e.currentTarget && !p.panel) void closeSettings();
       }}
     >
       <section
@@ -152,7 +175,7 @@ export function Settings(p: {
         onKeyDown={(e) => {
           if (e.key === "Escape") {
             e.stopPropagation();
-            p.onClose();
+            void closeSettings();
           }
           if (e.key === "Tab") {
             const controls = [
@@ -181,7 +204,11 @@ export function Settings(p: {
                 : "Session holds settings for this rabbit hole only."}
             </p>
           </div>
-          <IconButton name="x" label="Close settings" onClick={p.onClose} />
+          <IconButton
+            name="x"
+            label="Close settings"
+            onClick={() => void closeSettings()}
+          />
         </header>
         <div className="settings-layout">
           <nav aria-label="Settings sections">
@@ -541,9 +568,10 @@ export function Settings(p: {
                 <input
                   value={settings.analogy}
                   maxLength={300}
-                  onChange={(e) =>
-                    void saveSettings({ analogy: e.target.value })
-                  }
+                  onBlur={() => {
+                    if (draftPending.current) void saveSettings({});
+                  }}
+                  onChange={(e) => draftSettings({ analogy: e.target.value })}
                 />
               </label>
               {switchControl(

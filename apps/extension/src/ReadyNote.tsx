@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Button, IconButton } from "./components";
 import { Icon } from "./Icon";
+import { savedReceipt } from "./handoff-model";
 import type { Handoff } from "./handoff";
 export function ReadyNote({
   handoff,
@@ -55,9 +56,24 @@ export function ReadyNote({
       <div>
         <strong>Your map is ready</strong>
         <p>
-          Go added {handoff.ideas ?? 0} ideas and {handoff.questions ?? 0}{" "}
-          questions from {handoff.finds ?? handoff.captureIds.length} new finds.
+          Go added {handoff.ideas ?? 0}{" "}
+          {(handoff.ideas ?? 0) === 1 ? "idea" : "ideas"} and{" "}
+          {handoff.questions ?? 0}{" "}
+          {(handoff.questions ?? 0) === 1 ? "question" : "questions"} from{" "}
+          {Math.max(
+            0,
+            (handoff.finds ?? handoff.captureIds.length) -
+              (handoff.pendingFinds ?? 0),
+          )}{" "}
+          new{" "}
+          {(handoff.finds ?? handoff.captureIds.length) -
+            (handoff.pendingFinds ?? 0) ===
+          1
+            ? "find"
+            : "finds"}
+          .
         </p>
+        <p>{savedReceipt(handoff)}</p>
         <Button primary onClick={onOpen}>
           Open map
         </Button>

@@ -62,7 +62,7 @@ test("new questions start basic, review uses a sibling and confident misses lead
   ]);
   assert.equal(hub.topics[0].confidentMisses, 1);
   assert.equal(hub.topics[0].lanes.review[0].id, "variant");
-  assert.equal(hub.topics[0].lanes.new[0].id, "variant");
+  assert.equal(hub.topics[0].lanes.new[0].id, "hard");
   assert.equal(hub.topics[0].lanes.harder[0].id, "hard");
   assert.equal(
     hub.topics[0].strong +
@@ -80,9 +80,9 @@ test("harder unlock needs every basic tried and 75 percent unaided with no confi
     attempt("variant", "understood", { hintsUsed: 1 }),
   ];
   const locked = p.harderReady(p.practiceHub(a, tried).topics[0]);
-  assert.equal(locked.ready, false);
+  assert.equal(locked.ready, true);
   assert.equal(locked.reason.rightWithoutHints, 1);
-  assert.equal(locked.reason.basicTotal, 2);
+  assert.equal(locked.reason.basicTotal, 1);
   assert.equal(
     p.harderReady(
       p.practiceHub(a, [attempt("q1"), attempt("variant")]).topics[0],
@@ -114,14 +114,14 @@ test("a correct sibling clears its family's confident miss and review obligation
   assert.equal(hub.topics[0].confidentMisses, 0);
   assert.equal(hub.topics[0].lanes.review.length, 0);
 });
-test("primary concept does not hide the other conceptIds from topic membership", () => {
+test("a cross-topic question belongs only to its primary concept topic", () => {
   const a = bank();
   a.studyItems = [
     { ...a.studyItems[0], concept: "n1", conceptIds: ["n1", "empty"] },
   ];
   assert.deepEqual(
     p.practiceHub(a, []).topics.map((t) => t.total),
-    [1, 1],
+    [1, 0],
   );
 });
 test("mixed rounds interleave activities without repeats and retain basic-first order", () => {
@@ -134,10 +134,71 @@ test("mixed rounds interleave activities without repeats and retain basic-first 
   const t = p.practiceHub(a, []).all;
   assert.deepEqual(
     p.roundQueue(t, "new", "mixed", 8).map((i) => i.id),
-    ["q1", "flash", "q2", "variant", "hard"],
+    ["q1", "flash", "q2", "hard"],
   );
   assert.deepEqual(
     p.roundQueue(t, "new", "quiz", 5).map((i) => i.id),
-    ["q1", "q2", "variant"],
+    ["q1", "q2"],
+  );
+});
+
+test("orphan trees and nested main ideas each own questions exactly once", () => {
+  const a = bank();
+  a.concepts.push(
+    { ...a.concepts[0], id: "orphan", label: "Orphan", main: false },
+    { ...a.concepts[0], id: "root", label: "Root", main: false },
+    { ...a.concepts[0], id: "nested", parentId: "root", main: true },
+    { ...a.concepts[0], id: "leaf", parentId: "orphan", main: false },
+    { ...a.concepts[0], id: "empty-orphan", main: false },
+  );
+  a.studyItems = [
+    { ...a.studyItems[0], id: "orphan-q", conceptIds: ["leaf"] },
+    { ...a.studyItems[0], id: "nested-q", conceptIds: ["nested", "n1"] },
+  ];
+  const hub = p.practiceHub(a, []);
+  assert.equal(
+    hub.topics.reduce((n, t) => n + t.total, 0),
+    2,
+  );
+  assert.deepEqual(
+    hub.topics.find((t) => t.id === "orphan")?.items.map((i) => i.id),
+    ["orphan-q"],
+  );
+  assert.deepEqual(
+    hub.topics.find((t) => t.id === "nested")?.items.map((i) => i.id),
+    ["nested-q"],
+  );
+  assert.ok(hub.coverage.emptyTopics.some((t) => t.id === "empty-orphan"));
+  assert.ok(
+    hub.coverage.missingLanes.some(
+      (t) => t.topicId === "orphan" && t.lane === "harder",
+    ),
+  );
+});
+
+test("retry variants never enter New or inflate original-basic readiness", () => {
+  const hub = p.practiceHub(bank(), [attempt("q1")]);
+  assert.deepEqual(
+    hub.topics[0].lanes.new.map((i) => i.id),
+    ["hard"],
+  );
+  assert.equal(hub.topics[0].basicTotal, 1);
+  assert.equal(hub.topics[0].basicTried, 1);
+  assert.equal(p.harderReady(hub.topics[0]).ready, true);
+});
+
+test("solid basics without available harder questions request missing questions instead of readiness", () => {
+  const a = bank();
+  a.studyItems = a.studyItems.filter((i) => i.id !== "hard");
+  const hub = p.practiceHub(a, [attempt("q1")]);
+  assert.equal(p.harderReady(hub.topics[0]).ready, false);
+  assert.match(
+    p.harderLockReason(hub.topics[0]),
+    /Basics solid.*ask Go for harder/i,
+  );
+  assert.ok(
+    hub.coverage.missingLanes.some(
+      (m) => m.topicId === "n1" && m.lane === "harder",
+    ),
   );
 });

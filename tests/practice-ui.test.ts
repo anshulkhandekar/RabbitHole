@@ -117,7 +117,7 @@ test("matching locks each correct pair immediately and keeps wrong picks playabl
 });
 
 // Switching must preserve checked answers and discard an unchecked pick.
-test("topic switcher ends a round without saving an unchecked quiz pick", async () => {
+test("topic switcher preserves an already checked quiz answer", async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost" });
   Object.assign(globalThis, {
     window: dom.window,
@@ -164,9 +164,9 @@ test("topic switcher ends a round without saving an unchecked quiz pick", async 
   );
   await click(document.querySelectorAll(".run-options button")[1]);
   await click(document.querySelector('[aria-haspopup="dialog"]')!);
-  assert.match(document.body.textContent!, /unchecked pick/);
+  assert.match(document.body.textContent!, /1 checked answer is saved/);
   await click(document.querySelector('[data-switch-topic="n1"]')!);
-  assert.equal(saved.length, 0);
+  assert.equal(saved.length, 1);
   assert.equal(document.querySelector('[aria-expanded="true"]'), null);
   await act(async () => root.unmount());
   dom.window.close();

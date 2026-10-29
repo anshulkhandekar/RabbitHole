@@ -330,7 +330,7 @@ try {
   await ui.setViewportSize({ width: 320, height: 850 });
   await ui.bringToFront();
   await ui.getByRole("button", { name: "Send to Go", exact: true }).click();
-  await ui.getByText("Prompt sent to Go", { exact: true }).click();
+  await ui.getByText("Prompt copied — paste it in Go", { exact: true }).click();
   const handoffPrompt = await ui
     .getByLabel("Go processing prompt")
     .inputValue();
@@ -506,6 +506,7 @@ try {
   );
   fixture.title = "SYNTHETIC UI TEST · Parallel computing";
   console.log("CHECK fixture saved");
+  store.patch("test", sessionId, { title: fixture.title });
   store.save("test", fixture);
   await ui.bringToFront();
   await ui.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });

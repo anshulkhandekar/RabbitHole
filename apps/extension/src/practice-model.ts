@@ -220,18 +220,21 @@ export function harderReady(topic: PracticeTopic) {
     requiredRight: Math.ceil(topic.basicTotal * 0.75),
     confidentMisses: topic.confidentMisses,
   };
+  const basicsReady =
+    reason.basicTotal > 0 &&
+    reason.remaining === 0 &&
+    reason.rightWithoutHints >= reason.requiredRight &&
+    reason.confidentMisses === 0;
   return {
-    ready:
-      reason.basicTotal > 0 &&
-      reason.remaining === 0 &&
-      reason.rightWithoutHints >= reason.requiredRight &&
-      reason.confidentMisses === 0,
+    basicsReady,
+    ready: basicsReady && topic.lanes.harder.length > 0,
     reason,
   };
 }
 export function harderLockReason(topic: PracticeTopic) {
-  const { ready, reason: r } = harderReady(topic);
+  const { ready, basicsReady, reason: r } = harderReady(topic);
   if (ready) return "";
+  if (basicsReady) return "Basics solid — ask Go for harder questions.";
   if (!r.basicTotal) return "Ask Go for basic questions first.";
   if (r.remaining)
     return `Try all basics first: ${r.remaining} still untested.`;
@@ -244,22 +247,32 @@ export function practiceHub(
   attempts: Attempt[],
   now = Date.now(),
 ) {
-  const explicit = analysis.concepts.filter((c) => c.main),
-    roots = explicit.length
-      ? explicit
-      : analysis.concepts.filter((c) => !c.parentId),
-    rootIds = new Set(roots.map((c) => c.id)),
-    byId = new Map(analysis.concepts.map((c) => [c.id, c]));
+  const byId = new Map(analysis.concepts.map((c) => [c.id, c]));
   function topicOf(id: string): string | undefined {
     const visited = new Set<string>();
     while (!visited.has(id)) {
-      if (rootIds.has(id)) return id;
+      const concept = byId.get(id);
+      if (!concept) return;
+      if (concept.main || !concept.parentId || !byId.has(concept.parentId))
+        return id;
       visited.add(id);
-      const parent = byId.get(id)?.parentId;
-      if (!parent) return;
-      id = parent;
+      id = concept.parentId;
     }
+    // Defensive support for legacy malformed trees.
+    return [...visited].sort()[0];
   }
+  const rootIds = new Set(analysis.concepts.map((c) => topicOf(c.id)));
+  const roots = analysis.concepts.filter((c) => rootIds.has(c.id));
+  const owner = (item: StudyItem) =>
+    [
+      ...new Set([
+        ...(item.concept ? [item.concept] : []),
+        ...item.conceptIds,
+        ...conceptsOf(item),
+      ]),
+    ]
+      .map(topicOf)
+      .find((id) => id !== undefined) ?? roots[0]?.id;
   const latest = new Map<string, Attempt>();
   for (const a of [...attempts].sort((a, b) =>
     a.timestamp.localeCompare(b.timestamp),
@@ -297,7 +310,7 @@ export function practiceHub(
         flags = deriveFlags(analysis, relevant),
         ids = conceptsOf(item),
         result = attemptResult(item, a);
-      if (isBasic(item)) {
+      if (isBasic(item) && !item.variantOf) {
         basicTried++;
         if (result === "right" && !lucky(a)) rightWithoutHints++;
       }
@@ -324,7 +337,7 @@ export function practiceHub(
     );
     const lanes = {
       new: items
-        .filter((i) => !latest.has(i.id))
+        .filter((i) => !i.variantOf && !latest.has(i.id))
         .sort(
           (a, b) =>
             Number(isBasic(b)) - Number(isBasic(a)) ||
@@ -333,7 +346,9 @@ export function practiceHub(
       review: [
         ...new Map(retryItems(items, missed).map((i) => [i.id, i])).values(),
       ],
-      harder: items.filter((i) => !isBasic(i) && !latest.has(i.id)),
+      harder: items.filter(
+        (i) => !i.variantOf && !isBasic(i) && !latest.has(i.id),
+      ),
     };
     return {
       id,
@@ -345,7 +360,7 @@ export function practiceHub(
       strong,
       shaky,
       confidentMisses,
-      basicTotal: items.filter(isBasic).length,
+      basicTotal: items.filter((i) => isBasic(i) && !i.variantOf).length,
       basicTried,
       rightWithoutHints,
       lanes,
@@ -360,11 +375,7 @@ export function practiceHub(
     summarize(
       c.id,
       c.label,
-      analysis.studyItems.filter((i) =>
-        [...new Set([...i.conceptIds, ...conceptsOf(i)])].some(
-          (id) => topicOf(id) === c.id,
-        ),
-      ),
+      analysis.studyItems.filter((i) => owner(i) === c.id),
     ),
   );
   return {
@@ -378,9 +389,9 @@ export function practiceHub(
             (l) =>
               !t.items.some((i) =>
                 l === "harder"
-                  ? !isBasic(i)
+                  ? !i.variantOf && !isBasic(i)
                   : l === "new"
-                    ? isBasic(i)
+                    ? !i.variantOf && isBasic(i)
                     : !!i.variantOf,
               ),
           )
@@ -432,4 +443,11 @@ export function roundQueue(
     pool.splice(pool.indexOf(chosen), 1);
   }
   return result;
+}
+
+export function localOnlyNotice(attempts: Attempt[]) {
+  const count = attempts.filter((a) => a.localOnly).length;
+  return count
+    ? `${count} ${count === 1 ? "answer was" : "answers were"} checked against an older version and kept on this device.`
+    : "";
 }

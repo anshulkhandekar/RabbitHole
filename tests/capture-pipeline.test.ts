@@ -108,3 +108,77 @@ test("a rejected article capture is retried rather than permanently marked captu
     dom.window.close();
   }
 });
+
+test("stylesheet-hidden help and cookie banners are omitted before article parsing", () => {
+  const dom = new JSDOM(
+    `<style>#mdbook-help-container { display:none } .invisible { visibility:hidden }</style><main><h1>Rust</h1><p>${"Borrowing lets readers share data without copying it. ".repeat(15)}</p><div id="mdbook-help-container">Keyboard shortcuts help popup</div><p class="invisible">Invisible stylesheet text</p><div id="cookie-banner">Accept cookies or manage consent</div><div aria-label="Cookie consent">Consent preferences</div></main>`,
+  );
+  const text = pageText(dom.window.document);
+  assert.match(text!, /Borrowing/);
+  assert.doesNotMatch(
+    text!,
+    /shortcuts|Invisible|Accept cookies|Consent preferences/,
+  );
+  dom.window.close();
+});
+
+test("Google query is saved on load before the debounced content scan", async () => {
+  const dom = new JSDOM("<main>Results</main>", {
+    url: "https://www.google.com/search?q=fast+navigation",
+    runScripts: "outside-only",
+    pretendToBeVisual: true,
+  });
+  const captures: any[] = [];
+  Object.assign(dom.window, {
+    chrome: {
+      runtime: {
+        id: "test",
+        getURL: (p: string) => "chrome-extension://test/" + p,
+        onMessage: { addListener() {}, removeListener() {} },
+        sendMessage: async (m: any) => {
+          if (m.type === "reading-context")
+            return {
+              id: "s1",
+              included: true,
+              status: "active",
+              excluded: [],
+              settings: {},
+              readingMode: false,
+            };
+          if (m.type === "capture") {
+            captures.push(m.capture);
+            return { saved: true };
+          }
+          return {};
+        },
+      },
+    },
+    setTimeout: () => 0,
+    clearTimeout() {},
+    setInterval: () => 0,
+    clearInterval() {},
+  });
+  try {
+    dom.window.eval(bundle.outputFiles[0].text);
+    await new Promise((r) => setImmediate(r));
+    assert.equal(captures[0]?.sourceType, "search");
+    assert.equal(captures[0]?.text, "fast navigation");
+  } finally {
+    dom.window.close();
+  }
+});
+
+test("article titles and paragraphs have separators without duplicating a repeated H1", () => {
+  const dom = new JSDOM(
+    `<html><head><title>TCP congestion control</title></head><body><article><h1>TCP congestion control</h1><p>${"Independent operations proceed together when their inputs are ready. ".repeat(4)}</p><p>A second paragraph explains the boundary.</p></article></body></html>`,
+  );
+  try {
+    const text = pageText(dom.window.document)!;
+    assert.equal((text.match(/TCP congestion control/g) ?? []).length, 1);
+    assert.match(text, /^TCP congestion control\s+Independent operations/);
+    assert.match(text, /ready\.\s+A second paragraph/);
+    assert.doesNotMatch(text, /controlTCP|controlIndependent|ready\.A second/);
+  } finally {
+    dom.window.close();
+  }
+});

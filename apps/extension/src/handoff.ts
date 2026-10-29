@@ -13,4 +13,5 @@ export type Handoff = {
   ideas?: number;
   questions?: number;
   finds?: number;
+  pendingFinds?: number;
 };

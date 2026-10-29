@@ -27,7 +27,7 @@ test("widget position persists and shortcuts open each view and toggle visibilit
   assert.equal(app.local.state.sessions[started.active].status, "active");
 });
 
-test("handoff state is shared across views and resolves only after the submitted captures are saved", async () => {
+test("handoff state is shared across views and resolves on a newer saved version", async () => {
   const app = worker({ id: 7, url: base + "index.html?workspace=1" });
   const started = await app.request("start");
   const id = started.active;
@@ -50,7 +50,8 @@ test("handoff state is shared across views and resolves only after the submitted
     analysis: analysis(),
   });
   const partial = await app.request("refresh");
-  assert.equal(partial.handoffs[id].status, "waiting");
+  assert.equal(partial.handoffs[id].status, "saved");
+  assert.equal(partial.handoffs[id].pendingFinds, 1);
   app.setRemote({
     ...partial.sessions[id],
     version: 2,

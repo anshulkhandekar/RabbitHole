@@ -42,7 +42,8 @@ test("validation never reserves a version: the approved save rejects a stale dra
       () => drafts.save("alice", receipt.saveArguments),
       /Stale version/,
     );
-    assert.equal(db.get("alice", "s1").title, "A newer saved guide");
+    assert.equal(db.get("alice", "s1").analysis!.title, "A newer saved guide");
+    assert.equal(db.get("alice", "s1").title, "Research");
     assert.equal(db.get("alice", "s1").version, 1);
   } finally {
     db.db.close();

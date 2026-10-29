@@ -247,14 +247,90 @@ declare const __RABBIT_TOKENS__: string;
       | { pointerId: number; x: number; y: number; left: number; top: number }
       | undefined,
     movedWidget = false;
+  let placedPosition = { x: 1, y: 0.5 },
+    placedPage = "";
   function positionWidget(x: number, y: number) {
     if (!indicator) return;
-    const left = 8 + Math.max(0, Math.min(1, x)) * Math.max(0, innerWidth - 60),
-      top = 8 + Math.max(0, Math.min(1, y)) * Math.max(0, innerHeight - 56);
+    placedPosition = {
+      x: Math.max(0, Math.min(1, x)),
+      y: Math.max(0, Math.min(1, y)),
+    };
+    const left = 8 + placedPosition.x * Math.max(0, innerWidth - 60),
+      top = 8 + placedPosition.y * Math.max(0, innerHeight - 56);
     indicator.style.left = `${left}px`;
     indicator.style.top = `${top}px`;
     indicator.style.right = "auto";
     indicator.dataset.edge = left < innerWidth / 2 ? "left" : "right";
+  }
+  function placeWidget() {
+    const saved = context.widgetPosition ?? { x: 1, y: 0.5 };
+    positionWidget(saved.x, saved.y);
+    if (saved.x !== placedPosition.x || saved.y !== placedPosition.y) {
+      context.widgetPosition = { ...placedPosition };
+      void message({ type: "reading-position", position: placedPosition });
+    }
+    const interactive =
+        'button,a[href],input,select,textarea,[role="button"],[tabindex]:not([tabindex="-1"])',
+      controls = [...document.querySelectorAll<HTMLElement>(interactive)];
+    const blocked = () => {
+      if (!indicator || !document.elementsFromPoint) return false;
+      const widget = indicator.shadowRoot?.querySelector(".reading-widget"),
+        bounds = widget?.getBoundingClientRect(),
+        rect = bounds?.width ? bounds : indicator.getBoundingClientRect();
+      const cx = (rect.left + rect.right) / 2,
+        cy = (rect.top + rect.bottom) / 2;
+      return (
+        [
+          [cx, cy],
+          [cx, rect.top + 2],
+          [cx, rect.bottom - 2],
+          [rect.left + 2, cy],
+          [rect.right - 2, cy],
+          [rect.left + 2, rect.top + 2],
+          [rect.right - 2, rect.top + 2],
+          [rect.left + 2, rect.bottom - 2],
+          [rect.right - 2, rect.bottom - 2],
+        ].some(([x, y]) =>
+          document
+            .elementsFromPoint(x, y)
+            .some(
+              (el) =>
+                el !== indicator &&
+                el.getRootNode() !== indicator!.shadowRoot &&
+                !!el.closest(interactive),
+            ),
+        ) ||
+        controls.some((el) => {
+          const control = el.getBoundingClientRect();
+          return (
+            control.width > 0 &&
+            control.height > 0 &&
+            control.left < rect.right &&
+            control.right > rect.left &&
+            control.top < rect.bottom &&
+            control.bottom > rect.top
+          );
+        })
+      );
+    };
+    const origin = { ...placedPosition };
+    if (blocked()) {
+      for (let step = 1; step <= Math.ceil(innerHeight / 56); step++) {
+        let clear = false;
+        for (const direction of [1, -1]) {
+          positionWidget(
+            origin.x,
+            origin.y + (direction * step * 56) / Math.max(1, innerHeight - 56),
+          );
+          if (!blocked()) {
+            clear = true;
+            break;
+          }
+        }
+        if (clear) break;
+      }
+    }
+    placedPage = location.href;
   }
   window.addEventListener(
     "pointermove",
@@ -295,8 +371,7 @@ declare const __RABBIT_TOKENS__: string;
   window.addEventListener(
     "resize",
     () => {
-      if (context?.widgetPosition)
-        positionWidget(context.widgetPosition.x, context.widgetPosition.y);
+      positionWidget(placedPosition.x, placedPosition.y);
     },
     { signal: events.signal },
   );
@@ -550,13 +625,11 @@ declare const __RABBIT_TOKENS__: string;
       widget.append(open, pause, hide);
       shadow.append(widget);
       document.documentElement.append(indicator);
-      if (context.widgetPosition)
-        positionWidget(context.widgetPosition.x, context.widgetPosition.y);
+      placedPage = "";
     }
     const active = context.status === "active",
       shadow = indicator.shadowRoot!;
-    if (!widgetDrag && context.widgetPosition)
-      positionWidget(context.widgetPosition.x, context.widgetPosition.y);
+    if (!widgetDrag && placedPage !== location.href) placeWidget();
     shadow
       .querySelector(".status")!
       .classList.toggle("paused", !active || context.included === false);
@@ -669,5 +742,6 @@ declare const __RABBIT_TOKENS__: string;
     },
     { signal: events.signal },
   );
-  schedule();
+  if (googleQuery(location.href)) void scan();
+  else schedule();
 })();
