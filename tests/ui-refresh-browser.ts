@@ -16,7 +16,9 @@ import {
   type Attempt,
   type AnalysisData,
 } from "../packages/contracts/src/index";
-const server = createServer((_, res) => {
+const server = createServer((req, res) => {
+  if (req.method === "PATCH" && req.url === "/api/sessions/missing")
+    res.statusCode = 404;
   res.setHeader("Content-Type", "application/json");
   res.end("[]");
 }).listen(0, "127.0.0.1");
@@ -188,6 +190,36 @@ try {
       fullPage: true,
     });
   };
+  // Missing sessions retain their queue and explain the actual error in the panel.
+  await seed(
+    {
+      sessions: {
+        s1: session,
+        missing: { ...session, id: "missing", title: "Missing research" },
+      },
+      queue: [
+        {
+          id: "missing-write",
+          method: "PATCH",
+          path: "/api/sessions/missing",
+          body: { status: "finished" },
+        },
+      ],
+    },
+    "sources",
+    true,
+  );
+  await expect(page.locator(".sync-error")).toContainText(
+    /404.*Missing research/,
+  );
+  await expect(page.locator(".sync-error")).toBeVisible();
+  const blocked = await worker.evaluate(async () => {
+    const { state } = (await chrome.storage.local.get("state")) as {
+      state: any;
+    };
+    return { queued: state.queue.length, retained: !!state.sessions.missing };
+  });
+  expect(blocked).toEqual({ queued: 1, retained: true });
   // Saved sessions remain reachable with no active session and while starting a new one.
   for (const panel of [false, true]) {
     await seed({ active: "" }, "summary", panel);
@@ -245,6 +277,27 @@ try {
   // Question-only saves replace the session while the map remains mounted.
   await seed({}, "map");
   await expect(page.locator(".react-flow__edge-path")).toHaveCount(1);
+  // Tooltips at the bottom-left must stay inside the map viewport.
+  for (const label of ["Zoom in", "Zoom out", "Fit to view"]) {
+    const control = page.getByRole("button", { name: label, exact: true });
+    await control.hover();
+    const bounds = await control.evaluate((el) => {
+      const style = getComputedStyle(el, "::after"),
+        rect = el.getBoundingClientRect();
+      const width =
+        parseFloat(style.width) +
+        (style.boxSizing === "border-box"
+          ? 0
+          : parseFloat(style.paddingLeft) + parseFloat(style.paddingRight));
+      const left =
+        style.left === "auto"
+          ? rect.right - parseFloat(style.right) - width
+          : rect.left + parseFloat(style.left);
+      return { left, right: left + width, viewport: innerWidth };
+    });
+    expect(bounds.left).toBeGreaterThanOrEqual(0);
+    expect(bounds.right).toBeLessThanOrEqual(bounds.viewport);
+  }
   // Initial controlled-node measurement must also recover its handle bounds.
   // Reopening exercises the same async layout/measurement boundary as a cold load.
   for (let opening = 0; opening < 3; opening++) {
@@ -699,6 +752,46 @@ try {
           .getByRole("button", { name: "Send again", exact: true }),
       ).toBeEnabled();
     }
+    // Dismissal survives reload; opening from the panel clears the same notice in another workspace.
+    await seed({ handoffs: { s1: hand } }, "sources");
+    await page
+      .getByRole("button", { name: "Dismiss map ready note", exact: true })
+      .click();
+    await page.reload();
+    await page.locator(".ws").waitFor();
+    await page.clock.runFor(1500);
+    await expect(page.locator(".ready-note")).toHaveCount(0);
+    await worker.evaluate(async () => {
+      const { state } = (await chrome.storage.local.get("state")) as {
+        state: any;
+      };
+      state.sessions.s1.version = 2;
+      state.handoffs.s1.savedVersion = 2;
+      state.handoffs.s1.savedAt = new Date(Date.now() + 1000).toISOString();
+      state.mapUpdated = { s1: 2 };
+      await chrome.storage.local.set({ state });
+    });
+    await page.clock.runFor(1500);
+    await expect(page.locator(".ready-note")).toBeVisible();
+    await seed({ handoffs: { s1: hand } }, "sources", true);
+    const observer = await context.newPage();
+    await observer.goto(
+      `chrome-extension://${id}/index.html?workspace=1#sources`,
+    );
+    await expect(observer.locator(".ready-note")).toBeVisible();
+    const opened = context.waitForEvent("page");
+    await page.getByRole("button", { name: "Open map", exact: true }).click();
+    const mapPage = await opened;
+    await expect(observer.locator(".ready-note")).toHaveCount(0);
+    await expect(page.locator(".ready-note")).toHaveCount(0);
+    await mapPage.locator(".ws").waitFor();
+    await expect(mapPage.locator(".ready-note")).toHaveCount(0);
+    await observer.reload();
+    await observer.locator(".ws").waitFor();
+    await expect(observer.locator(".ready-note")).toHaveCount(0);
+    await observer.close();
+    await mapPage.close();
+    await page.bringToFront();
     await seed({ goCompletion: "quiet", handoffs: { s1: hand } }, "sources");
     await expect(
       page.locator('.segmented[aria-label="Views"] .new-find-dot'),

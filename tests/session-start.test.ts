@@ -336,3 +336,26 @@ test("following an article enrolls a new search before same-tab navigation", asy
   );
   assert.equal(context.included, true);
 });
+
+test("dismissing a saved map persists per version without marking its map as read", async () => {
+  const app = worker({ id: 7, url: base + "index.html?workspace=1" });
+  const id = (await app.request("start")).active;
+  app.local.state.sessions[id].version = 3;
+  await app.request("map-dismiss", { id, version: 2 });
+  const state = await app.request("state");
+  assert.equal(state.mapDismissed[id], 2);
+  assert.equal(state.mapSeen?.[id] ?? 0, 0);
+  await app.request("map-dismiss", { id, version: 1 });
+  assert.equal((await app.request("state")).mapDismissed[id], 2);
+  const invalid = await app.request("map-dismiss", { id, version: 4 });
+  assert.ok(invalid.error);
+  assert.equal((await app.request("state")).mapDismissed[id], 2);
+});
+
+test("opening an older map acknowledges only that version, leaving a newer save unread", async () => {
+  const app = worker({ id: 7, url: base + "index.html?workspace=1" });
+  const id = (await app.request("start")).active;
+  app.local.state.sessions[id].version = 3;
+  await app.request("map-seen", { id, version: 2 });
+  assert.equal((await app.request("state")).mapSeen[id], 2);
+});

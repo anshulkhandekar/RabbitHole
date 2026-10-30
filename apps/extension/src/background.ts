@@ -44,6 +44,7 @@ type Local = {
   goChats?: Record<string, { url: string; agentUrl: string }>;
   goTabs?: Record<string, number>;
   mapSeen?: Record<string, number>;
+  mapDismissed?: Record<string, number>;
   mapUpdated?: Record<string, number>;
   sessionLastUsed?: Record<string, string>;
   // Tab-scoped like bindings: cleared on browser restart.
@@ -363,8 +364,11 @@ async function flush(s: Local) {
           continue;
         }
         if (r.status === 404 && q.method !== "DELETE") {
-          s.error =
-            "A session no longer exists on the server. Export local data or delete the local session.";
+          const sessionId = q.path.split("/")[3],
+            title = s.sessions[sessionId]?.title;
+          s.error = sessionId
+            ? `Sync blocked (404): “${title ?? sessionId}” is unavailable on this backend. Check the backend/account, or export this local session before removing it.`
+            : "Sync blocked (404): the endpoint is unavailable. Check the backend URL in Settings. Local changes are retained.";
           break;
         }
         if (!(r.status === 404 && q.method === "DELETE"))
@@ -381,25 +385,31 @@ async function flush(s: Local) {
     }
   }
 }
-async function register() {
-  if (
-    await chrome.permissions.contains({
-      origins: ["http://*/*", "https://*/*"],
-    })
-  ) {
-    await chrome.scripting.unregisterContentScripts().catch(() => {});
-    await chrome.scripting.registerContentScripts([
-      {
-        id: "research",
-        matches: ["http://*/*", "https://*/*"],
-        js: ["content.js"],
-        runAt: "document_idle",
-        allFrames: false,
-        persistAcrossSessions: true,
-      },
-    ]);
-  }
+let registration = Promise.resolve();
+function register() {
+  const next = registration.then(async () => {
+    if (
+      await chrome.permissions.contains({
+        origins: ["http://*/*", "https://*/*"],
+      })
+    ) {
+      await chrome.scripting.unregisterContentScripts().catch(() => {});
+      await chrome.scripting.registerContentScripts([
+        {
+          id: "research",
+          matches: ["http://*/*", "https://*/*"],
+          js: ["content.js"],
+          runAt: "document_idle",
+          allFrames: false,
+          persistAcrossSessions: true,
+        },
+      ]);
+    }
+  });
+  registration = next.catch(() => {});
+  return next;
 }
+
 chrome.runtime.onInstalled.addListener(() => {
   void chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
   void chrome.contextMenus.create({
@@ -910,9 +920,20 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
       return s;
     }
 
-    if (msg.type === "map-seen" && s.sessions[msg.id]) {
-      s.mapSeen ??= {};
-      s.mapSeen[msg.id] = s.sessions[msg.id].version;
+    if (
+      (msg.type === "map-seen" || msg.type === "map-dismiss") &&
+      s.sessions[msg.id]
+    ) {
+      const version = msg.version ?? s.sessions[msg.id].version;
+      if (
+        !Number.isInteger(version) ||
+        version < 0 ||
+        version > s.sessions[msg.id].version
+      )
+        throw new Error("That map version is unavailable.");
+      const versions =
+        msg.type === "map-seen" ? (s.mapSeen ??= {}) : (s.mapDismissed ??= {});
+      versions[msg.id] = Math.max(versions[msg.id] ?? 0, version);
       await persist(s);
       return s;
     }

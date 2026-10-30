@@ -8,7 +8,7 @@ test("each rabbit hole learns and reuses its Go task URL, even after closing the
   await app.request("go-open", { id });
   assert.equal(app.created.length, 1);
   const task =
-    "https://go.superhuman.com/tasks/07d00917-f841-4073-b1e6-750f880096cf";
+    "https://go.superhuman.com/tasks/00000000-0000-4000-8000-000000000001";
   await app.navigate(101, task);
   await app.navigate(101, "https://go.superhuman.com/tasks/another-chat");
   await app.request("go-open", { id });
@@ -29,7 +29,7 @@ test("an existing conversation can be linked explicitly, and unrelated URLs are 
     state = await app.request("start"),
     id = state.active;
   const task =
-    "https://go.superhuman.com/tasks/07d00917-f841-4073-b1e6-750f880096cf";
+    "https://go.superhuman.com/tasks/00000000-0000-4000-8000-000000000001";
   assert.equal(
     (
       await app.request("go-chat", {

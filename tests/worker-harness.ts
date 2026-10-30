@@ -28,7 +28,10 @@ export function worker(
   let command: Function;
   const opened: any[] = [],
     created: any[] = [];
-  let updated: Function, removed: Function, tabCreated: Function;
+  let updated: Function,
+    removed: Function,
+    tabCreated: Function,
+    startup: Function;
   const browserTabs = new Map<number, any>([[tab.id, tab]]),
     activated: any[] = [];
   const event = () => ({ addListener() {} });
@@ -45,7 +48,11 @@ export function worker(
       id: "test-extension",
       getURL: (path: string) => base + path,
       onInstalled: event(),
-      onStartup: event(),
+      onStartup: {
+        addListener(fn: Function) {
+          startup = fn;
+        },
+      },
       onMessage: {
         addListener(fn: Function) {
           listener = fn;
@@ -108,8 +115,8 @@ export function worker(
     contextMenus: { onClicked: event() },
     permissions: { contains: async () => true },
     scripting: {
-      unregisterContentScripts: async () => {},
-      registerContentScripts: async () => {},
+      unregisterContentScripts: async (_filter?: { ids?: string[] }) => {},
+      registerContentScripts: async (_scripts: { id: string }[]) => {},
       executeScript: async (options: any) => {
         injected.push(options.target.tabId);
       },
@@ -175,6 +182,10 @@ export function worker(
       ),
     );
   return {
+    chrome,
+    startup() {
+      startup();
+    },
     request,
     content,
     fromTab,

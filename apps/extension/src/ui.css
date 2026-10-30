@@ -5619,3 +5619,17 @@ h3 {
   right: var(--s-6);
   transform: none;
 }
+
+.map-zoom .icon-btn[data-tip]:hover::after,
+.map-zoom .icon-btn[data-tip]:focus-visible::after {
+  top: 50%;
+  left: calc(100% + 8px);
+  right: auto;
+  transform: translateY(-50%);
+}
+
+.sync-error {
+  flex-basis: 100%;
+  color: var(--carrot-ink);
+  overflow-wrap: anywhere;
+}

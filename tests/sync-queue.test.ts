@@ -276,3 +276,28 @@ test("refresh recognizes an already accepted server attempt after an uncertain s
     "a confirmed server copy is not a local-only answer",
   );
 });
+
+test("a missing remote session names the blocked session and retains all queued research", async () => {
+  const app = worker(
+    { id: 7, url: "https://example.org" },
+    async () => new Response("Not found", { status: 404 }),
+  );
+  const id = (
+    await app.request("start", { title: "Research from another profile" })
+  ).active;
+  app.local.state.queue = [
+    {
+      id: "blocked",
+      method: "PATCH",
+      path: `/api/sessions/${id}`,
+      body: { status: "finished" },
+    },
+  ];
+  app.local.state.config.token = "tok";
+  const state = await app.request("flush");
+  assert.match(state.error, /404/);
+  assert.match(state.error, /Research from another profile/);
+  assert.match(state.error, /export/i);
+  assert.equal(state.queue.length, 1);
+  assert.ok(state.sessions[id]);
+});
