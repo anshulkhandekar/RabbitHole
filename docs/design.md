@@ -47,4 +47,4 @@ These are candidates, not shipped features or commitments.
 3. **Cross-session learning.** Consider related-trail discovery and spaced review after within-session practice is proven. Cross-session graphs and a calibrated review scheduler are out of the current release.
 4. **Capture robustness.** Broaden conservative Overview extraction against current Google variants, improve article completeness and show extraction quality. Preserve manual selection and user-controlled tab inclusion.
 5. **Identity and operations.** Replace personal static tokens with appropriate sign-in/provisioning, device revocation and recoverable accounts. Add supported backup/restore and observability without logging private source text. Move beyond single-instance SQLite only when actual usage requires it.
-6. **Export and accessibility.** Evaluate import/restore, richer portable guides and broader assistive-technology testing. The current JSON export is not an import workflow.
+6. **Export and accessibility.** Evaluate import/restore, richer portable guides and broader assistive-technology testing. Current exports (JSON, Markdown, Anki, Quizlet) are one-way; there is no import workflow.

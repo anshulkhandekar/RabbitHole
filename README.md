@@ -12,9 +12,9 @@ The connector uses schema **8**. See [setup](docs/setup.md) to run the project a
 
 1. **Research intentionally.** Start a named rabbit hole, include research tabs and follow links. Pause, exclude pages or remove accidental finds. The compact bunny lets you read without keeping a sidebar open; Article saved offers a quick Undo.
 2. **Make the connections.** Send to Go copies a session-specific prompt and opens your configured agent. Paste/send it, let Go inspect the actual captures, then approve a validated save. A newer saved version ends the waiting state; any unprocessed finds remain clearly counted.
-3. **Inspect the reasoning.** Summary explains mechanisms, implications and gaps. Map organizes main ideas and their details, with a reading route and source drawer. Dashed connections are Go inferences; supported connections link to captured evidence. Layout never manufactures a relationship.
+3. **Inspect the reasoning.** Summary explains mechanisms, implications and gaps. Map organizes main ideas and their details, with a reading route and source drawer. Solid connections link to excerpts from your captured sources. Dashed connections are not directly supported by your trail (Go's inferences or added explanations) and are labelled as such. Layout never manufactures a relationship.
 4. **Practise deliberately.** Choose a topic, New questions, Review misses or eligible medium/hard practice. Checked answers save immediately. Retry variants are kept separate from unanswered original questions. Request more questions with a topic, count and difficulty selection.
-5. **Return later.** Session previews retain original start dates and sort by recent use or updates. Your trail, saved guide and attempts persist; JSON export keeps a portable record.
+5. **Return later.** Session previews retain original start dates and sort by recent use or updates. Your trail, saved guide and attempts persist. Take a session with you as Markdown notes, an Anki CSV deck, Quizlet import text (copied to the clipboard) or a complete JSON record.
 
 ## Why the Go handoff is explicit
 
@@ -34,7 +34,8 @@ flowchart LR
   Go -->|Read and validate| MCP[Owner-scoped MCP tools]
   Go -->|User approves save| MCP
   MCP --> DB
-  API -->|Observed saved version| Workspace[Summary, Map and Practice]
+  Extension -->|Polls for a newer saved version| API
+  Extension --> Workspace[Summary, Map and Practice]
 ```
 
 | Component                 | Responsibility                                                                      |
@@ -65,7 +66,16 @@ Setup creates an ignored `.env` with a random personal token and leaves existing
 3. Start a session and confirm captures sync. Article collection is configurable; searches and manual highlights still work when it is off. Use Alt+Shift+H for a selection, or the selection context menu. Chrome shortcuts can be reassigned.
 4. For Go generation, deploy a reachable HTTPS backend and configure the connector using the [setup guide](docs/setup.md). Go cannot reach your localhost. The extension and Go must use credentials for the same owner.
 
-After rebuilding an installed unpacked extension, **Reload** its Chrome extensions card and refresh research/Go tabs. Browser restart preserves sessions but pauses collection and clears tab bindings. Resume and explicitly include your current research tab. Alt+Shift+B restores a hidden bunny; hiding it does not pause capture.
+After rebuilding an installed unpacked extension, **Reload** its Chrome extensions card and refresh research/Go tabs. Browser restart preserves sessions but pauses collection and clears tab bindings. Resume and explicitly include your current research tab. Hiding the bunny does not pause capture.
+
+| Shortcut    | Action                         |
+| ----------- | ------------------------------ |
+| Alt+Shift+R | Open the RabbitHole side panel |
+| Alt+Shift+M | Open the expanded workspace    |
+| Alt+Shift+H | Save the selected text         |
+| Alt+Shift+B | Hide or show the reading bunny |
+
+Shortcuts can be reassigned at `chrome://extensions/shortcuts`.
 
 ## Verify
 
@@ -73,7 +83,7 @@ After rebuilding an installed unpacked extension, **Reload** its Chrome extensio
 npm run check          # types, regression tests, production build
 npm run lint           # formatting
 npx playwright install chromium
-npm run test:release   # check + lint + both browser suites + Stage 3 + reload
+npm run test:release   # check + lint + all packaged-extension browser suites
 git diff --check
 ```
 
@@ -99,4 +109,4 @@ The [roadmap](docs/design.md#future-improvements) covers supported Go invocation
 
 ## License
 
-No project license has been granted. Dependency notices are in [THIRD_PARTY.md](THIRD_PARTY.md) and [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt).
+RabbitHole is released under the [MIT License](LICENSE). Contributions, forks and improvements are welcome. Dependency notices are in [THIRD_PARTY.md](THIRD_PARTY.md) and [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt).

@@ -188,6 +188,60 @@ try {
       fullPage: true,
     });
   };
+  // Saved sessions remain reachable with no active session and while starting a new one.
+  for (const panel of [false, true]) {
+    await seed({ active: "" }, "summary", panel);
+    await expect(
+      page.getByRole("heading", { name: "Start a rabbit hole", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Switch rabbit hole", exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Switch rabbit hole", exact: true })
+      .click();
+    await page.getByRole("menuitem", { name: /Parallel computing/ }).click();
+    await expect(
+      page.getByRole("heading", { name: "Start a rabbit hole", exact: true }),
+    ).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Switch rabbit hole", exact: true })
+      .click();
+    await page
+      .getByRole("menuitem", { name: "Start a new rabbit hole", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Start a rabbit hole", exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Switch rabbit hole", exact: true })
+      .click();
+    await page.screenshot({
+      path: `test-results/welcome-history-${panel ? "panel" : "workspace"}.png`,
+    });
+    await page.getByRole("menuitem", { name: /Parallel computing/ }).click();
+    await expect(
+      page.getByRole("heading", { name: "Start a rabbit hole", exact: true }),
+    ).toHaveCount(0);
+    const saved = await worker.evaluate(async () => {
+      const { state } = (await chrome.storage.local.get("state")) as {
+        state: any;
+      };
+      return {
+        ids: Object.keys(state.sessions),
+        active: state.active,
+        status: state.sessions.s1.status,
+      };
+    });
+    expect(saved).toEqual({ ids: ["s1"], active: "s1", status: "paused" });
+    await seed({ active: "", sessions: {} }, "summary", panel);
+    await expect(
+      page.getByRole("heading", { name: "Start a rabbit hole", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Switch rabbit hole", exact: true }),
+    ).toHaveCount(0);
+  }
   // Question-only saves replace the session while the map remains mounted.
   await seed({}, "map");
   await expect(page.locator(".react-flow__edge-path")).toHaveCount(1);

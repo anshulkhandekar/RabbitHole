@@ -1011,6 +1011,9 @@ function App() {
               setCreating(false);
             }}
           />
+          {!panel && sessions.length > 0 && (!session || creating) && (
+            <div className="tb-title">{SessionSwitcher()}</div>
+          )}
           {!panel && session && !creating && (
             <>
               <div className="tb-title">
@@ -1130,7 +1133,10 @@ function App() {
         </header>
         {panel ? (
           !session || creating ? (
-            Welcome()
+            <>
+              {sessions.length > 0 && SessionSwitcher()}
+              {Welcome()}
+            </>
           ) : (
             <>
               {SessionSwitcher()}
