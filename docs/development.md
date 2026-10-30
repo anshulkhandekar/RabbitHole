@@ -33,7 +33,7 @@ git diff --check
 
 The [testing guide](testing.md) describes scope, Chromium configuration and manual acceptance. `npm run format` applies the repository's formatting. `npx coda validate integrations/superhuman/pack.ts` validates the connector without releasing it.
 
-Use `tests/worker-harness.ts` for worker behaviour; its custom fetch option supports failure and concurrency cases. Keep new stored fields optional, existing sessions readable and validation at least as strict. Tool-contract changes require a deliberate discovery revision and live schema check. Instruction-only changes do not.
+Use `tests/worker-harness.ts` for worker behavior; its custom fetch option supports failure and concurrency cases. Keep new stored fields optional, existing sessions readable and validation at least as strict. Tool-contract changes require a deliberate discovery revision and live schema check. Instruction-only changes do not.
 
 ## Installed extension
 

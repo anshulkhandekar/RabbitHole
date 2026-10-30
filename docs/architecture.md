@@ -1,5 +1,7 @@
 # Architecture
 
+RabbitHole is built around a user-enabled browsing session. The capture path preserves the research trail with lightweight feedback and explicit controls; generated guides and practice build on that record.
+
 RabbitHole separates capture, generation and validation. The extension records a user-enabled trail; Go reasons over it; the backend validates and persists the result. No external LLM API or arbitrary-page fetcher runs in the backend.
 
 ```mermaid
@@ -29,7 +31,7 @@ sequenceDiagram
 
 The content script sees the DOM but has no backend token. The MV3 worker owns tab scope, credentials, persisted queue and serialized mutations. Local storage survives worker suspension; browser-session bindings clear on browser restart, when collection pauses conservatively. The React side panel, workspace and options use one bundled entry point.
 
-The Express API derives ownership from bearer authentication. SQLite transactions protect full analysis saves and question-only top-ups. A persistent disk and single instance are required. Source text is untrusted data, rendered as text rather than captured HTML. The guarantees and limits below describe provenance, deletion and retry behaviour.
+The Express API derives ownership from bearer authentication. SQLite transactions protect full analysis saves and question-only top-ups. A persistent disk and single instance are required. Source text is untrusted data, rendered as text rather than captured HTML. The guarantees and limits below describe provenance, deletion and retry behavior.
 
 ## Go contract
 
@@ -80,3 +82,9 @@ There is no export import feature or automated backup restore UI. Personal token
 ### Local display metadata
 
 Optional browser-only sessionLastUsed records recent meaningful use and is never sent as server session data. Session previews sort by recent use/server update but display the original createdAt. Refresh preserves an earlier local start when an offline session first synced later. Question requests and layout revisions do not rewrite start dates. A handoff completes when the saved version advances; its receipt counts processed submitted finds separately from still-pending finds. Deleted-find failures count only submitted captures that remain present and unprocessed, including hidden finds.
+
+Map-ready dismissals are browser-local and version-specific. They survive refresh and are shared by the sidebar and workspace; opening a map acknowledges that displayed version. A newer save remains eligible for notification, and dismissing a note does not itself mark the map as read. Content-script registration is serialized across startup and user actions to prevent duplicate script IDs. Sync failures show their actionable error in the footer; a missing remote session retains its queued changes and local research for explicit recovery.
+
+### Portable outputs
+
+Markdown export renders an existing visible guide as readable text with source URLs and available idea evidence quotations. It does not export complete article bodies or the full search trail, and its idea cross-links use wiki-link syntax. JSON exports the complete selected local session, including raw captures, queries, analysis and attempts; it does not include connection credentials. Markdown requires a saved analysis, while JSON is available before generation. Anki CSV and copied Quizlet text provide additional one-way study exports. There is no local-file upload, import/restore flow or cross-tool round-trip guarantee.

@@ -104,13 +104,31 @@ function App() {
   const mapDot =
     (state?.mapSeen?.[state.active] ?? 0) <
     (state?.mapUpdated?.[state.active] ?? handoff?.savedVersion ?? 0);
+  const noticeVersion =
+    handoff?.savedVersion ??
+    state?.sessions[handoff?.sessionId ?? ""]?.version ??
+    0;
+  const noticeAcknowledged =
+    Math.max(
+      state?.mapSeen?.[handoff?.sessionId ?? ""] ?? 0,
+      state?.mapDismissed?.[handoff?.sessionId ?? ""] ?? 0,
+    ) >= noticeVersion;
   useEffect(() => {
-    if (handoff?.status !== "saved" || notified.current === handoff.savedAt)
+    if (
+      handoff?.status !== "saved" ||
+      noticeAcknowledged ||
+      state.goCompletion === "quiet"
+    ) {
+      setReadyNote(false);
       return;
-    notified.current = handoff.savedAt ?? "";
+    }
+    const key = `${handoff.sessionId}:${handoff.savedAt}:${noticeVersion}`;
+    if (notified.current === key) return;
+    notified.current = key;
     const mode = state.goCompletion ?? "notify";
-    if (mode === "quiet") return;
+    let current = true;
     void chrome.tabs.getCurrent().then((tab) => {
+      if (!current) return;
       if (
         mode === "open" &&
         !panel &&
@@ -119,10 +137,23 @@ function App() {
       ) {
         setView("map");
         setReadyNote(false);
-        void action("map-seen", { id: handoff.sessionId });
+        void action("map-seen", {
+          id: handoff.sessionId,
+          version: noticeVersion,
+        });
       } else setReadyNote(true);
     });
-  }, [handoff?.status, handoff?.savedAt]);
+    return () => {
+      current = false;
+    };
+  }, [
+    handoff?.status,
+    handoff?.sessionId,
+    handoff?.savedAt,
+    noticeVersion,
+    noticeAcknowledged,
+    state?.goCompletion,
+  ]);
   useEffect(() => {
     setReadyNote(false);
   }, [state?.active]);
@@ -291,8 +322,8 @@ function App() {
   }, [session?.id]);
   useEffect(() => {
     if (!panel && session && view === "map")
-      void action("map-seen", { id: session.id });
-  }, [view, session?.id, panel]);
+      void action("map-seen", { id: session.id, version: session.version });
+  }, [view, session?.id, session?.version, panel]);
   const patch = (patch: any) => action("patch", { id: session!.id, patch });
   async function grant() {
     return chrome.permissions.request({
@@ -763,6 +794,7 @@ function App() {
             Try again
           </button>
         )}
+        {state.error && <span className="sync-error">{state.error}</span>}
       </div>
     );
   }
@@ -851,16 +883,28 @@ function App() {
     );
   }
   function Ready() {
-    return readyNote && handoff?.status === "saved" ? (
+    return readyNote &&
+      handoff?.status === "saved" &&
+      !noticeAcknowledged &&
+      (panel || view !== "map") ? (
       <ReadyNote
         key={handoff.savedAt}
         handoff={handoff}
         onOpen={() => {
           setReadyNote(false);
-          void action("map-seen", { id: handoff.sessionId });
+          void action("map-seen", {
+            id: handoff.sessionId,
+            version: noticeVersion,
+          });
           openWorkspace("map");
         }}
-        onDismiss={() => setReadyNote(false)}
+        onDismiss={() => {
+          setReadyNote(false);
+          void action("map-dismiss", {
+            id: handoff.sessionId,
+            version: noticeVersion,
+          });
+        }}
       />
     ) : null;
   }
@@ -1055,7 +1099,10 @@ function App() {
                   setView(next);
                   if (next === "map" && session) {
                     setReadyNote(false);
-                    void action("map-seen", { id: session.id });
+                    void action("map-seen", {
+                      id: session.id,
+                      version: session.version,
+                    });
                   }
                 }}
               />

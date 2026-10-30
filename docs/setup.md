@@ -60,11 +60,11 @@ Drafts are owner/session-bound, capped at 32 entries and expire after thirty min
 
 ## Limits and troubleshooting
 
-Search-only trails support interests and gaps, not invented factual teaching. Capture a substantive article or highlight to support a learning guide. Inferred connections must remain labelled.
+Search-only trails support interests and gaps, not invented factual teaching. Capture a substantive article or highlight to support a learning guide. Inferred connections must remain labeled.
 
 If tools or fields are absent, check the deployed backend and attached schema 8 connector before changing prompts. Updating Instructions alone cannot add tools. If a save fails, inspect its actionable error and current version rather than approving repeated unchanged writes. A waiting state cannot observe Go's chat errors directly; Check Go directs the user back after a stall.
 
-The public builder offers several trigger types and describes beta availability. No supported authenticated extension-to-Go invocation path has been verified here. Scheduling cadence and unattended approval behaviour are not release claims. See [design decisions](design.md) and [manual acceptance testing](testing.md#manual-acceptance).
+The public builder offers several trigger types and describes beta availability. No supported authenticated extension-to-Go invocation path has been verified here. Scheduling cadence and unattended approval behavior are not release claims. See [design decisions](design.md) and [manual acceptance testing](testing.md#manual-acceptance).
 
 ## Updating an installation
 

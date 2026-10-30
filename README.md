@@ -1,28 +1,53 @@
-# RabbitHole
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/media/rabbithole-mark-dark.svg">
+    <img src="docs/media/rabbithole-mark-light.svg" alt="RabbitHole" width="120">
+  </picture>
+</p>
+<h1 align="center">RabbitHole</h1>
+<p align="center"><b>Keep the trail. Find the connection.</b></p>
+<p align="center">
+  <a href="https://youtu.be/zytJ4YJhMho">RabbitHole Demo</a> · <a href="#how-it-works">How it works</a> ·
+  <a href="#getting-started">Getting started</a> · <a href="docs/architecture.md">Architecture</a> ·
+  <a href="../../issues">Issues</a>
+</p>
 
-**Keep the trail. Find the connection.**
+<p align="center">
+  RabbitHole is a Chrome extension that collects your research only when you ask.
+  Start a session and browse naturally: it keeps searches, readable articles and highlights
+  while you focus on reading and following questions.
+</p>
+<p align="center">
+  Superhuman Go reasons over the captured trail through RabbitHole’s MCP tools to build an
+  evidence-linked map. Practice asks you to use the ideas, and Markdown export keeps your
+  saved guide and source links portable.
+</p>
 
-You can spend an hour following links and still struggle to explain how the ideas fit together. Browser history remembers addresses. A chat summary remembers what you pasted. RabbitHole preserves an intentionally collected research trail, turns its sources into an evidence-linked map with Superhuman Go, and helps you test what you can explain afterward.
+## See it in action
 
-A Chrome extension collects searches, articles and highlights. Go synthesizes the material and writes learning activities through an authenticated MCP connector. RabbitHole stores the guide, links claims back to sources, and keeps practice progress across visits. No separate LLM API key is required.
+[Watch the RabbitHole Demo](https://youtu.be/zytJ4YJhMho) for the complete walkthrough, including Go approval, inferred connections and practice.
 
-The connector uses schema **8**. See [setup](docs/setup.md) to run the project and [testing](docs/testing.md) for verification scope.
+### Capture while you read
 
-## The experience
+Included articles and selected passages join your research trail with lightweight confirmation.
 
-1. **Research intentionally.** Start a named rabbit hole, include research tabs and follow links. Pause, exclude pages or remove accidental finds. The compact bunny lets you read without keeping a sidebar open; Article saved offers a quick Undo.
-2. **Make the connections.** Send to Go copies a session-specific prompt and opens your configured agent. Paste/send it, let Go inspect the actual captures, then approve a validated save. A newer saved version ends the waiting state; any unprocessed finds remain clearly counted.
-3. **Inspect the reasoning.** Summary explains mechanisms, implications and gaps. Map organizes main ideas and their details, with a reading route and source drawer. Solid connections link to excerpts from your captured sources. Dashed connections are not directly supported by your trail (Go's inferences or added explanations) and are labelled as such. Layout never manufactures a relationship.
-4. **Practise deliberately.** Choose a topic, New questions, Review misses or eligible medium/hard practice. Checked answers save immediately. Retry variants are kept separate from unanswered original questions. Request more questions with a topic, count and difficulty selection.
-5. **Return later.** Session previews retain original start dates and sort by recent use or updates. Your trail, saved guide and attempts persist. Take a session with you as Markdown notes, an Anki CSV deck, Quizlet import text (copied to the clipboard) or a complete JSON record.
+![Article saved, highlighted passage and highlight confirmation](docs/media/capture-highlight.gif)
 
-## Why the Go handoff is explicit
+### Revisit the trail
 
-MCP lets **Go call RabbitHole's tools**. It does not itself let the extension start a Go conversation. This implementation has no verified supported external invocation API, so it copies the precise prompt, opens Go and waits for an actual saved backend version. Opening a tab is never reported as completed generation. Writes retain **Always ask** approval.
+Searches, articles and highlights stay together in the session’s source trail.
 
-The public Go builder now documents beta features and triggers. We have not established that those features provide an authenticated third-party extension invocation path for this project; private or partner capabilities may differ. The [design guide](docs/design.md#go-invocation-confirmed-scope-and-uncertainty) records the sources and this uncertainty. A supported invocation adapter is a future improvement, rather than an undocumented endpoint workaround.
+![Research finds accumulating and the saved source trail](docs/media/trail.gif)
 
-## Architecture
+### Inspect the evidence
+
+Select a supported connection to inspect its saved quotation and source.
+
+![Supported map connection with its exact source quotation](docs/media/map-evidence.gif)
+
+## How it works
+
+![RabbitHole architecture: scoped Chrome capture, backend and Go MCP tools, approved persistence, and the saved guide](docs/media/architecture.png)
 
 ```mermaid
 flowchart LR
@@ -48,7 +73,44 @@ flowchart LR
 
 Go owns generative reasoning. The server does not fetch arbitrary source URLs or run another LLM. Source IDs, quotations and versions are checked before a save; those checks cannot prove the semantic truth of a generated explanation. See [architecture and data guarantees](docs/architecture.md) and [tradeoffs](docs/design.md).
 
-## Run locally
+### Go handoff
+
+The current connector uses discovery schema **8**.
+
+MCP lets **Go call RabbitHole's tools**. It does not itself let the extension start a Go conversation. This implementation has no verified supported external invocation API, so it copies the precise prompt, opens Go and waits for an actual saved backend version. Opening a tab is never reported as completed generation. Writes retain **Always ask** approval.
+
+The public Go builder now documents beta features and triggers. We have not established that those features provide an authenticated third-party extension invocation path for this project; private or partner capabilities may differ. The [design guide](docs/design.md#go-invocation-confirmed-scope-and-uncertainty) records the sources and this uncertainty. A supported invocation adapter is a future improvement, rather than an undocumented endpoint workaround.
+
+## Research at your own pace
+
+1. **Follow a real question.** Start a rabbit hole with an optional goal and include the tabs you want to collect. Search, open articles, go back and follow another lead. Observable child tabs can inherit their included opener; unrelated tabs need explicit inclusion.
+2. **Keep reading.** Searches and enabled article capture build the trail as you browse. Save a passage with a highlight shortcut or opt into automatic selection highlights. The bunny provides lightweight feedback without requiring the sidebar to stay open.
+3. **Stay in control.** Pause collection, exclude a page, remove an accidental find or use the quick Article saved Undo. Article collection is configurable. Google Overview captures are labeled as AI-generated, and their linked pages are not treated as independently read.
+4. **Reflect when you are ready.** Send the collected session to Go for a guide grounded in the captured material. Inspect an idea or relationship alongside its evidence, distinguish inference from direct support, and optionally check your understanding in Practice. These features build on the trail you researched.
+5. **Return or take it with you.** Reopen a session with its original start date, sources and progress. Export a saved guide as Markdown, study material as an Anki CSV or Quizlet import text, or the complete session as JSON.
+
+## Why preserve the research process?
+
+Choosing sources, comparing competing explanations and working through an unfamiliar mechanism are meaningful parts of the activity. RabbitHole is designed to reduce the bookkeeping around that work: remembering where you went, saving useful passages and reconstructing the trail after the tabs close.
+
+You choose the questions and read the sources. Go then helps organize what you explored, surface connections and give you something to revisit. RabbitHole keeps source discovery, reading and judgment in your hands, with AI available for reflection when you want it.
+
+| When it is useful                      | What the captured trail gives you                                                                |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Learning an unfamiliar technical topic | The searches, explanations and useful passages that helped you build an understanding            |
+| Investigating a decision               | A source-linked record of the options, tradeoffs and unanswered questions you encountered        |
+| Following an unexpected curiosity      | A way to preserve a spontaneous investigation without turning every page into a note-taking task |
+| Writing or sharing findings            | A portable guide with source links you can inspect, edit and use in your own work                |
+
+## Exports
+
+After a guide is saved, **Markdown export** carries its summary, takeaways, idea explanations, available idea evidence quotations, quiz questions and visible non-search source titles and links into a text file. You can keep it in a Markdown-compatible editor, a project repository or another workflow that accepts text. Idea cross-links use wiki-link syntax, whose rendering depends on the destination; the source URLs remain ordinary links.
+
+The guide stays useful outside RabbitHole. Keep reading, annotate it yourself, share it or use it as context in a different workflow. You do not have to use every in-house feature to benefit from collecting the session.
+
+For the complete selected session, **JSON export** preserves the raw captured text and searches, analysis and attempts. JSON is also available before Go has generated a guide. Exports are one-way today; RabbitHole does not yet import them or guarantee native round-trip compatibility with other applications.
+
+## Getting started
 
 Requires Node **22.20+** and Chrome **120+**.
 
@@ -77,7 +139,7 @@ After rebuilding an installed unpacked extension, **Reload** its Chrome extensio
 
 Shortcuts can be reassigned at `chrome://extensions/shortcuts`.
 
-## Verify
+## Tests
 
 ```sh
 npm run check          # types, regression tests, production build
@@ -91,13 +153,13 @@ Set `CHROMIUM_PATH` to an existing Chromium executable when needed. See [develop
 
 ## Tradeoffs and next steps
 
-- Explicit tab inclusion favours user control over capturing all browser history. Opener lineage indicates browsing continuity, not topic relevance.
+- Explicit tab inclusion favors user control over capturing all browser history. Opener lineage indicates browsing continuity, not topic relevance.
 - A durable local queue supports temporary disconnection; permanent HTTP failures remain visible and can require intervention. Device storage is finite.
 - SQLite on a persistent disk keeps the prototype small and transactional; it requires one service instance. Static personal tokens need manual provisioning and rotation.
 - Practice checks saved keys and records confidence/hints. It is not a measured learning-gain claim or a spaced-repetition scheduler. Content quality needs a real-source review.
 - Captures are bounded to 12,000 characters, sessions to 300 finds, and guides to 40 activities. Google Overview extraction depends on the current DOM; manual selection is the fallback.
 
-The [roadmap](docs/design.md#future-improvements) covers supported Go invocation, richer quality evaluation, cross-session review, authentication and scale. None is represented as shipped.
+The [roadmap](docs/design.md#future-improvements) covers broader capture support, local-file input, spaced review, portability, processing quality and stronger operations. None is represented as shipped.
 
 ## Documentation
 
