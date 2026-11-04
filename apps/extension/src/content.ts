@@ -103,8 +103,12 @@ declare const __RABBIT_TOKENS__: string;
             : type === "google_ai_overview"
               ? "AI Overview saved"
               : "Article saved",
-        type === "article"
-          ? { captureId: result.captureId ?? captureId, sessionId }
+        type === "article" || type === "highlight"
+          ? {
+              captureId: result.captureId ?? captureId,
+              sessionId,
+              sourceType: type,
+            }
           : undefined,
       );
     }
@@ -718,7 +722,11 @@ declare const __RABBIT_TOKENS__: string;
   }
   function showReadingNote(
     text: string,
-    article?: { captureId: string; sessionId: string },
+    capture?: {
+      captureId: string;
+      sessionId: string;
+      sourceType: "article" | "highlight";
+    },
   ) {
     if (!indicator) return;
     const shadow = indicator.shadowRoot!;
@@ -727,15 +735,20 @@ declare const __RABBIT_TOKENS__: string;
     note.className = "reading-note";
     note.setAttribute("role", "status");
     note.textContent = text;
-    if (article) {
+    if (capture) {
       note.classList.add("article-saved");
       const undo = document.createElement("button");
       undo.textContent = "↶ Undo";
-      undo.setAttribute("aria-label", "Undo article save");
+      undo.setAttribute("aria-label", `Undo ${capture.sourceType} save`);
       undo.onclick = async () => {
         undo.disabled = true;
-        const result = await message({ type: "reading-undo", ...article });
-        if (result?.removed) showReadingNote("Article removed");
+        const result = await message({ type: "reading-undo", ...capture });
+        if (result?.removed)
+          showReadingNote(
+            capture.sourceType === "highlight"
+              ? "Highlight removed"
+              : "Article removed",
+          );
         else {
           undo.disabled = false;
           undo.title = result?.error ?? "Couldn’t undo. Try again.";
@@ -748,7 +761,7 @@ declare const __RABBIT_TOKENS__: string;
     note.style.top = above ? "auto" : "48px";
     note.style.bottom = above ? "48px" : "auto";
     clearTimeout(noteTimer);
-    noteTimer = setTimeout(() => note.remove(), article ? 10000 : 2200);
+    noteTimer = setTimeout(() => note.remove(), capture ? 5000 : 2200);
   }
   function scheduleSelection() {
     clearTimeout(selectionTimer);
@@ -764,8 +777,7 @@ declare const __RABBIT_TOKENS__: string;
         readSelection(document) !== selected
       )
         return;
-      const result = await send("highlight", selected, [], "important", true);
-      if (result?.saved) showReadingNote("Highlight saved");
+      await send("highlight", selected, [], "important", true);
     }, 750);
   }
   document.addEventListener("selectionchange", scheduleSelection, {

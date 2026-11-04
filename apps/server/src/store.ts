@@ -19,6 +19,7 @@ import {
   canonicalSourceReferences,
 } from "./source-reference-model";
 import { visibleAnalysis } from "../../../packages/contracts/src/sources";
+import { captureIdentity } from "../../../packages/contracts/src/capture-identity";
 import { quoteCandidates } from "./evidence-model";
 export class DomainError extends Error {
   constructor(
@@ -136,8 +137,9 @@ export class Store {
         createHash("sha256")
           .update(JSON.stringify([x.sourceType, x.url, x.text]))
           .digest("hex");
+      const identity = captureIdentity(c);
       const existing = s.captures.find(
-        (x) => x.id === c.id || digest(x) === digest(c),
+        (x) => x.id === c.id || captureIdentity(x) === identity,
       );
       if (existing) {
         if (existing.id === c.id && digest(existing) !== digest(c))

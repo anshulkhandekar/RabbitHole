@@ -15,6 +15,7 @@ import type { Handoff } from "./handoff";
 import { googleQuery } from "./google";
 import { isExcluded, looksUnrelated, siteKey } from "./exclusion";
 import { visibleAnalysis } from "../../../packages/contracts/src/sources";
+import { captureIdentity } from "../../../packages/contracts/src/capture-identity";
 type Offer = { query: string; at: number; kind: string };
 type Local = {
   sessions: Record<string, Session>;
@@ -189,6 +190,19 @@ async function updateResumedTab(s: Local, tab?: chrome.tabs.Tab) {
     isExcluded(s.excluded[s.active ?? ""], tab.url!)
   )
     return;
+  const session = s.active ? s.sessions[s.active] : undefined;
+  const saved = session?.captures
+    .filter(
+      (c) =>
+        c.url === tab.url &&
+        !session.hidden?.includes(c.id) &&
+        !session.removed?.includes(c.id),
+    )
+    .at(-1);
+  if (session && saved) {
+    s.tabs[tab.id] = session.id;
+    s.lastCapture[tab.id] = saved.id;
+  }
   await persist(s);
   await chrome.scripting.executeScript({
     target: { tabId: tab.id },
@@ -544,15 +558,11 @@ async function capture(
     )
   )
     return { ignored: true };
-  if (
-    session.captures.some(
-      (c) =>
-        c.sourceType === parsed.sourceType &&
-        c.url === parsed.url &&
-        c.text === parsed.text,
-    )
-  )
-    return { duplicate: true };
+  const identity = captureIdentity(parsed);
+  const existing = session.captures.find(
+    (c) => captureIdentity(c) === identity,
+  );
+  if (existing) return { duplicate: true, captureId: existing.id };
   let parentCaptureId: string | undefined = s.lastCapture[tabId];
   const overviewKey = JSON.stringify([tabId, session.id, parsed.url]);
   if (parsed.sourceType === "google_ai_overview") {
@@ -791,8 +801,14 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
         throw new Error("This page is not in the active session");
       if (!c && session.removed?.includes(msg.captureId))
         return { removed: true };
-      if (!c || c.sourceType !== "article" || c.url !== sender.url)
-        throw new Error("Only this page's saved article can be undone here");
+      if (
+        !c ||
+        !["article", "highlight"].includes(c.sourceType) ||
+        c.url !== sender.url
+      )
+        throw new Error(
+          "Only this page's saved article or highlight can be undone here",
+        );
       await removeCapture(s, session, c.id);
       await persist(s);
       await flush(s);
@@ -817,6 +833,26 @@ async function handle(msg: any, sender: chrome.runtime.MessageSender) {
     }
     if (!internal)
       throw new Error("This operation is available only in RabbitHole");
+    if (msg.type === "open-source") {
+      const session = s.sessions[msg.sessionId];
+      const capture = session?.captures.find((c) => c.id === msg.captureId);
+      if (!session || !capture || !/^https?:/.test(capture.url))
+        throw new Error("That source no longer exists");
+      const tab = await chrome.tabs.create({
+        url: capture.url,
+        active: msg.active !== false,
+      });
+      if (
+        tab.id !== undefined &&
+        !tab.incognito &&
+        s.active === session.id &&
+        !isExcluded(s.excluded[session.id], capture.url)
+      ) {
+        s.tabs[tab.id] = session.id;
+        s.lastCapture[tab.id] = capture.id;
+      }
+      return { opened: true };
+    }
     if (msg.type === "ui-context") {
       const [tab] = await chrome.tabs.query({
         active: true,

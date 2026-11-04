@@ -21,6 +21,26 @@ export type CaptureAction =
   | "exclude-site"
   | "delete";
 type Capture = Session["captures"][number];
+function openSource(
+  event: React.MouseEvent<HTMLAnchorElement>,
+  sessionId: string,
+  captureId: string,
+) {
+  if (event.button > 1 || typeof chrome === "undefined") return;
+  event.preventDefault();
+  const href = event.currentTarget.href;
+  void chrome.runtime
+    .sendMessage({
+      type: "open-source",
+      sessionId,
+      captureId,
+      active: !event.ctrlKey && !event.metaKey && event.button !== 1,
+    })
+    .then((result) => {
+      if (result?.error) window.open(href, "_blank", "noopener,noreferrer");
+    })
+    .catch(() => window.open(href, "_blank", "noopener,noreferrer"));
+}
 function CaptureMenu({
   capture,
   hidden,
@@ -139,7 +159,13 @@ export function SourceQuote({
         </details>
       )}
       <footer>
-        <a href={capture.url} target="_blank" rel="noreferrer">
+        <a
+          href={capture.url}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(event) => openSource(event, session.id, capture.id)}
+          onAuxClick={(event) => openSource(event, session.id, capture.id)}
+        >
           {capture.title || domain(capture.url)}
         </a>
         <time dateTime={capture.timestamp}>{time(capture.timestamp)}</time>
@@ -239,6 +265,8 @@ export function Trail({
                   title={c.title || c.text}
                   target="_blank"
                   rel="noreferrer"
+                  onClick={(event) => openSource(event, session.id, c.id)}
+                  onAuxClick={(event) => openSource(event, session.id, c.id)}
                 >
                   {c.sourceType === "search"
                     ? c.text
