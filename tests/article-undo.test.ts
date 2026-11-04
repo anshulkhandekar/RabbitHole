@@ -54,7 +54,7 @@ test("article Undo removes the exact capture, queues deletion and prevents autom
   );
 });
 
-test("article Undo cannot delete a different page, a highlight or another session", async () => {
+test("page Undo cannot delete a different page or another session", async () => {
   const url = "https://research.example/article",
     app = worker({ id: 7, url });
   const id = (await app.request("start")).active;
@@ -72,7 +72,6 @@ test("article Undo cannot delete a different page, a highlight or another sessio
     7,
   );
   for (const [sessionId, captureId, page] of [
-    [id, "highlight", url],
     ["other", "highlight", url],
     [id, "highlight", "https://elsewhere.example/"],
   ])
@@ -86,4 +85,66 @@ test("article Undo cannot delete a different page, a highlight or another sessio
       ).error,
     );
   assert.equal(app.local.state.sessions[id].captures.length, 1);
+});
+
+test("highlight Undo removes only that capture offline and suppresses automatic recapture", async () => {
+  const url = "https://research.example/article",
+    app = worker({ id: 7, url });
+  const id = (await app.request("start")).active;
+  const c = {
+    ...capture("highlight1"),
+    sourceType: "highlight",
+    sessionId: id,
+    url,
+  };
+  await app.fromTab({ type: "capture", capture: c }, url, 7);
+  await app.fromTab(
+    {
+      type: "capture",
+      capture: { ...c, id: "highlight2", text: "Another passage" },
+    },
+    url,
+    7,
+  );
+  const undone = await app.fromTab(
+    { type: "reading-undo", sessionId: id, captureId: c.id },
+    url,
+    7,
+  );
+  assert.equal(undone.removed, true);
+  assert.deepEqual(
+    app.local.state.sessions[id].captures.map((c: any) => c.id),
+    ["highlight2"],
+  );
+  assert.ok(app.local.state.sessions[id].removed.includes(c.id));
+  assert.ok(
+    app.local.state.queue.some(
+      (q: any) => q.method === "DELETE" && q.path.endsWith("/highlight1"),
+    ),
+  );
+  assert.ok(
+    !app.local.state.queue.some(
+      (q: any) => q.method === "POST" && q.body?.id === c.id,
+    ),
+  );
+  assert.equal(
+    (
+      await app.fromTab(
+        { type: "capture", automatic: true, capture: { ...c, id: "retry" } },
+        url,
+        7,
+      )
+    ).ignored,
+    true,
+  );
+  assert.equal(
+    (
+      await app.fromTab(
+        { type: "capture", capture: { ...c, id: "intentional-resave" } },
+        url,
+        7,
+      )
+    ).saved,
+    true,
+  );
 });
